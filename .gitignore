@@ -1,0 +1,24 @@
+# Virtual environment
+.venv/
+
+# Database files (keep data/.gitkeep)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test / build artifacts
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+
+# Local Claude settings (not shared)
+.claude/settings.local.json
+
+# Environment
+.env

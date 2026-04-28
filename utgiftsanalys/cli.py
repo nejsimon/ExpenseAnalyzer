@@ -1,0 +1,140 @@
+from datetime import date
+
+import click
+
+from .adapters import ADAPTERS, AmbiguousAdapterError
+from .db import DEFAULT_DB_PATH, fetch_accounts, get_connection, init_db
+from .importer import import_file
+from .output import render_accounts, render_adapters, render_import_result, render_prediction, render_recurring_summary, render_stats
+from .predictor import next_month, predict_month
+from .recurring import build_patterns
+from .stats import compute_stats
+
+
+@click.group()
+@click.option("--db", default=DEFAULT_DB_PATH, show_default=True, help="Path to SQLite database.")
+@click.option("--account", default=None, help="Filter by account number (Kontonummer).")
+@click.pass_context
+def main(ctx: click.Context, db: str, account: str | None) -> None:
+    """Utgiftsanalys — Swedish bank transaction analyser."""
+    ctx.ensure_object(dict)
+    ctx.obj["db"] = db
+    ctx.obj["account"] = account
+
+
+@main.command("import")
+@click.argument("file", type=click.Path(exists=True))
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.option("--adapter", "adapter_name", default=None, help="Adapter name (skips auto-detection).")
+@click.pass_context
+def import_cmd(ctx: click.Context, file: str, fmt: str, adapter_name: str | None) -> None:
+    """Import transactions from a CSV file."""
+    adapter = None
+    if adapter_name is not None:
+        adapter = next((a for a in ADAPTERS if a.name == adapter_name), None)
+        if adapter is None:
+            known = ", ".join(a.name for a in ADAPTERS)
+            click.echo(f"Unknown adapter '{adapter_name}'. Available: {known}", err=True)
+            return
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    try:
+        inserted, skipped, _ = import_file(file, conn, adapter=adapter)
+    except AmbiguousAdapterError as exc:
+        click.echo("Multiple adapters matched this file:")
+        for i, a in enumerate(exc.candidates, 1):
+            click.echo(f"  {i}. {a.name}")
+        choice = click.prompt("Select adapter number", type=int)
+        chosen = exc.candidates[choice - 1]
+        inserted, skipped, _ = import_file(file, conn, adapter=chosen)
+    conn.close()
+    render_import_result(inserted, skipped, fmt)
+
+
+@main.command("adapters")
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+def adapters_cmd(fmt: str) -> None:
+    """List available CSV adapters."""
+    render_adapters(ADAPTERS, fmt)
+
+
+@main.command()
+@click.option("--month", default=None, help="Analysis month YYYY-MM (default: current month).")
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.option("--deposits-only", is_flag=True, default=False, help="Show only the income/deposits section.")
+@click.pass_context
+def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool) -> None:
+    """Show recurring patterns and one-offs."""
+    if month is None:
+        today = date.today()
+        month = f"{today.year}-{today.month:02d}"
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    account = ctx.obj["account"]
+    exp_patterns, exp_one_offs = build_patterns(conn, account=account, direction="expenses")
+    inc_patterns, inc_one_offs = build_patterns(conn, account=account, direction="income")
+    conn.close()
+    exp_one_offs = [o for o in exp_one_offs if str(o.booking_date)[:7] == month]
+    inc_one_offs = [o for o in inc_one_offs if str(o.booking_date)[:7] == month]
+    render_recurring_summary(exp_patterns, exp_one_offs, inc_patterns, inc_one_offs, fmt, deposits_only)
+
+
+@main.command()
+@click.option("--month", default=None, help="Target month YYYY-MM (default: next month).")
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.pass_context
+def predict(ctx: click.Context, month: str | None, fmt: str) -> None:
+    """Predict expenses and income for a given month."""
+    if month is None:
+        month = next_month(date.today())
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    account = ctx.obj["account"]
+    exp_patterns, _ = build_patterns(conn, account=account, direction="expenses")
+    inc_patterns, _ = build_patterns(conn, account=account, direction="income")
+    conn.close()
+    exp_lines = predict_month(exp_patterns, month)
+    inc_lines = predict_month(inc_patterns, month)
+    render_prediction(exp_lines, inc_lines, month, fmt)
+
+
+@main.command()
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.pass_context
+def stats(ctx: click.Context, fmt: str) -> None:
+    """Show yearly expense and income statistics."""
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    year_stats = compute_stats(conn, account=ctx.obj["account"])
+    conn.close()
+    render_stats(year_stats, fmt)
+
+
+@main.command()
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.pass_context
+def accounts(ctx: click.Context, fmt: str) -> None:
+    """List all known accounts and their transaction counts."""
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    accts = fetch_accounts(conn)
+    conn.close()
+    render_accounts(accts, fmt)
+
+
+@main.command()
+@click.option("--confirm", is_flag=True, help="Required to confirm deletion.")
+@click.pass_context
+def reset(ctx: click.Context, confirm: bool) -> None:
+    """Drop and recreate the database."""
+    if not confirm:
+        click.echo("Pass --confirm to reset the database.")
+        return
+    import os
+    db_path = ctx.obj["db"]
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    conn = get_connection(db_path)
+    init_db(conn)
+    conn.close()
+    click.echo(f"Database reset: {db_path}")

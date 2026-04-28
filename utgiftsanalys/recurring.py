@@ -1,0 +1,147 @@
+import sqlite3
+import statistics
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+from .db import fetch_transactions
+
+_PERIOD_DAYS = {"monthly": 30, "quarterly": 91, "yearly": 365}
+
+
+@dataclass
+class RecurringPattern:
+    reference: str
+    description: str
+    cadence: str
+    amount_type: str
+    fixed_amount: float | None
+    min_amount: float | None
+    max_amount: float | None
+    start_date: date
+    end_date: date | None
+    status: str
+    amounts: list[float]
+
+
+@dataclass
+class OneOff:
+    reference: str
+    description: str
+    booking_date: date
+    amount: float
+
+
+def _detect_cadence(dates: list[date]) -> str | None:
+    if len(dates) < 2:
+        return None
+    gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+    mean = statistics.mean(gaps)
+    if len(gaps) >= 2:
+        stdev = statistics.stdev(gaps)
+        if stdev >= 0.30 * mean:
+            return None
+    if 25 <= mean <= 35:
+        return "monthly"
+    if 80 <= mean <= 100:
+        return "quarterly"
+    if 330 <= mean <= 400:
+        return "yearly"
+    return None
+
+
+def _classify_amounts(amounts: list[float]) -> tuple:
+    """Returns ('fixed', amount) or ('variable', min, max)."""
+    abs_amounts = [abs(a) for a in amounts]
+    mean = statistics.mean(abs_amounts)
+    stdev = statistics.stdev(abs_amounts) if len(abs_amounts) > 1 else 0.0
+
+    # Check if last 3+ occurrences form a new fixed price (price increase)
+    if len(abs_amounts) >= 3:
+        recent = abs_amounts[-3:]
+        recent_stdev = statistics.stdev(recent) if len(recent) > 1 else 0.0
+        if recent_stdev < 5.0 or (mean > 0 and recent_stdev / mean < 0.02):
+            return ("fixed", statistics.mean(recent))
+
+    if stdev < 5.0 or (mean > 0 and stdev / mean < 0.02):
+        return ("fixed", mean)
+    return ("variable", min(abs_amounts), max(abs_amounts))
+
+
+def build_patterns(
+    conn: sqlite3.Connection,
+    reference_date: date | None = None,
+    account: str | None = None,
+    direction: str = "expenses",
+) -> tuple[list[RecurringPattern], list[OneOff]]:
+    today = reference_date or date.today()
+    rows = fetch_transactions(
+        conn,
+        outgoing_only=(direction == "expenses"),
+        incoming_only=(direction == "income"),
+        account=account,
+    )
+
+    # Group by (reference, description)
+    groups: dict[tuple[str, str], list] = {}
+    for row in rows:
+        key = (row["reference"] or "", row["description"] or "")
+        groups.setdefault(key, []).append(row)
+
+    patterns: list[RecurringPattern] = []
+    one_offs: list[OneOff] = []
+
+    for (ref, desc), txs in groups.items():
+        txs_sorted = sorted(txs, key=lambda t: t["booking_date"])
+        dates = [date.fromisoformat(t["booking_date"]) for t in txs_sorted]
+        amounts = [t["amount"] for t in txs_sorted]
+
+        cadence = _detect_cadence(dates)
+        if cadence is None:
+            for tx in txs:
+                one_offs.append(
+                    OneOff(
+                        reference=ref,
+                        description=desc,
+                        booking_date=date.fromisoformat(tx["booking_date"]),
+                        amount=tx["amount"],
+                    )
+                )
+            continue
+
+        classification = _classify_amounts(amounts)
+        if classification[0] == "fixed":
+            amount_type, fixed_amount = "fixed", classification[1]
+            min_amount = max_amount = None
+        else:
+            amount_type = "variable"
+            fixed_amount = None
+            _, min_amount, max_amount = classification
+
+        last_seen = max(dates)
+        period = _PERIOD_DAYS[cadence]
+        if (today - last_seen).days > 1.5 * period:
+            status = "canceled"
+            end_date = last_seen
+        else:
+            status = "active"
+            end_date = None
+
+        patterns.append(
+            RecurringPattern(
+                reference=ref,
+                description=desc,
+                cadence=cadence,
+                amount_type=amount_type,
+                fixed_amount=fixed_amount,
+                min_amount=min_amount,
+                max_amount=max_amount,
+                start_date=min(dates),
+                end_date=end_date,
+                status=status,
+                amounts=amounts,
+            )
+        )
+
+    patterns.sort(key=lambda p: (p.cadence, p.description))
+    one_offs.sort(key=lambda o: o.booking_date)
+    return patterns, one_offs
