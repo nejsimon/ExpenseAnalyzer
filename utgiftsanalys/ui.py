@@ -130,17 +130,29 @@ def _tab_analyze(conn, account: str | None) -> None:
     if not deposits_only:
         st.subheader("Expenses — recurring")
         df = _pattern_df(exp_patterns)
-        st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(none)")
+        if not df.empty:
+            st.dataframe(df, width="stretch", hide_index=True)
+        else:
+            st.caption("(none)")
         st.subheader("Expenses — one-offs")
         df = _one_off_df(exp_one_offs)
-        st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(none)")
+        if not df.empty:
+            st.dataframe(df, width="stretch", hide_index=True)
+        else:
+            st.caption("(none)")
 
     st.subheader("Income — recurring")
     df = _pattern_df(inc_patterns)
-    st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(none)")
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    else:
+        st.caption("(none)")
     st.subheader("Income — one-offs")
     df = _one_off_df(inc_one_offs)
-    st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(none)")
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    else:
+        st.caption("(none)")
 
 
 # ── Tab: Predict ──────────────────────────────────────────────────────────────
@@ -188,11 +200,17 @@ def _tab_predict(conn, account: str | None) -> None:
 
     st.subheader("Expense predictions")
     df = _prediction_df(exp_lines)
-    st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(none)")
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    else:
+        st.caption("(none)")
 
     st.subheader("Income predictions")
     df = _prediction_df(inc_lines)
-    st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(none)")
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    else:
+        st.caption("(none)")
 
 
 # ── Tab: Stats ────────────────────────────────────────────────────────────────
@@ -226,11 +244,17 @@ def _tab_stats(conn, account: str | None) -> None:
 
     st.subheader("Expenses")
     df = _stats_df(year_stats, "expense")
-    st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(no data)")
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    else:
+        st.caption("(no data)")
 
     st.subheader("Income")
     df = _stats_df(year_stats, "income")
-    st.dataframe(df, width="stretch", hide_index=True) if not df.empty else st.caption("(no data)")
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    else:
+        st.caption("(no data)")
 
 
 # ── Tab: Accounts ─────────────────────────────────────────────────────────────
