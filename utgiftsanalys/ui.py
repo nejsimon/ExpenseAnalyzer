@@ -300,7 +300,7 @@ def _tab_charts(conn, account: str | None) -> None:
             tooltip=["month", alt.Tooltip("expenses:Q", format=".2f")],
         )
     )
-    st.altair_chart(chart1, use_container_width=True)
+    st.altair_chart(chart1, width="stretch")
 
     # Chart 2 — Monthly income
     st.subheader("Monthly income")
@@ -313,7 +313,7 @@ def _tab_charts(conn, account: str | None) -> None:
             tooltip=["month", alt.Tooltip("income:Q", format=".2f")],
         )
     )
-    st.altair_chart(chart2, use_container_width=True)
+    st.altair_chart(chart2, width="stretch")
 
     if df_pred.empty or df_pred["predicted_expenses"].sum() == 0:
         st.caption("No recurring patterns found — skipping prediction charts.")
@@ -342,7 +342,7 @@ def _tab_charts(conn, account: str | None) -> None:
             tooltip=["month", "series", alt.Tooltip("SEK:Q", format=".2f")],
         )
     )
-    st.altair_chart(chart3, use_container_width=True)
+    st.altair_chart(chart3, width="stretch")
 
     # Chart 4 — Prediction deviation
     st.subheader("Prediction deviation (predicted − actual)")
@@ -361,7 +361,7 @@ def _tab_charts(conn, account: str | None) -> None:
             tooltip=["month", alt.Tooltip("deviation:Q", format=".2f")],
         )
     )
-    st.altair_chart(chart4, use_container_width=True)
+    st.altair_chart(chart4, width="stretch")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
