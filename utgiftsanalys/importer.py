@@ -7,7 +7,7 @@ from pathlib import Path
 
 import chardet
 
-from .adapters import AmbiguousAdapterError, CsvAdapter, detect_adapter
+from .adapters import ADAPTERS, AmbiguousAdapterError, CsvAdapter, detect_adapter
 from .calendar_utils import get_analysis_month
 from .db import insert_transaction
 
@@ -115,6 +115,23 @@ def detect_holes(batch: list[dict]) -> list[str]:
     return warnings
 
 
+def _find_header_line(lines: list[str]) -> int:
+    """Return the index of the first line whose columns match any known adapter."""
+    all_delimiters = {a.delimiter for a in ADAPTERS} | {","}
+    for i, line in enumerate(lines):
+        for delimiter in all_delimiters:
+            row = next(csv.reader([line], delimiter=delimiter))
+            cleaned = [h.strip().lstrip("﻿") for h in row]
+            try:
+                detect_adapter(cleaned)
+                return i
+            except AmbiguousAdapterError:
+                return i
+            except ValueError:
+                continue
+    return 0
+
+
 def import_file(
     path: str,
     conn: sqlite3.Connection,
@@ -126,21 +143,23 @@ def import_file(
     Raises ValueError if no adapter matches.
     """
     encoding = detect_encoding(path)
-    batch: list[dict] = []
     with open(path, encoding=encoding, newline="") as f:
-        reader = csv.DictReader(f, delimiter=adapter.delimiter if adapter else ",")
-        if adapter is None:
-            headers = list(reader.fieldnames or [])
-            result = detect_adapter(headers)
-            if isinstance(result, list):
-                raise AmbiguousAdapterError(result)
-            adapter = result
-            # Re-open with correct delimiter if it differs from the default
-            if adapter.delimiter != ",":
-                f.seek(0)
-                reader = csv.DictReader(f, delimiter=adapter.delimiter)
-        for raw in reader:
-            batch.append(_normalize_row(raw, adapter))
+        all_lines = f.readlines()
+
+    lines = all_lines[_find_header_line(all_lines):]
+
+    batch: list[dict] = []
+    reader = csv.DictReader(lines, delimiter=adapter.delimiter if adapter else ",")
+    if adapter is None:
+        headers = list(reader.fieldnames or [])
+        result = detect_adapter(headers)
+        if isinstance(result, list):
+            raise AmbiguousAdapterError(result)
+        adapter = result
+        if adapter.delimiter != ",":
+            reader = csv.DictReader(lines, delimiter=adapter.delimiter)
+    for raw in reader:
+        batch.append(_normalize_row(raw, adapter))
 
     warnings = detect_holes(batch)
     for w in warnings:

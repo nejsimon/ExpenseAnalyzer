@@ -38,6 +38,23 @@ def test_import_inserts_row():
         os.unlink(path)
 
 
+def test_import_skips_preamble_rows():
+    preamble = (
+        "Exported from Swedbank 2026-04-28\n"
+        "Account holder: Test Testsson\n"
+    )
+    conn = _make_conn()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(preamble + CSV_CONTENT_UTF8)
+        path = f.name
+    try:
+        inserted, skipped, _ = import_file(path, conn)
+        assert inserted == 1
+        assert skipped == 0
+    finally:
+        os.unlink(path)
+
+
 def test_import_deduplicates():
     conn = _make_conn()
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
