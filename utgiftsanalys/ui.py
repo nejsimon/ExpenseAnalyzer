@@ -6,13 +6,13 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from .adapters import ADAPTERS, AmbiguousAdapterError
-from .chart_data import monthly_actuals, monthly_with_predictions
-from .db import DEFAULT_DB_PATH, fetch_accounts, fetch_months, get_connection, init_db
-from .importer import import_file
-from .predictor import next_month, predict_month
-from .recurring import build_patterns
-from .stats import compute_stats
+from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
+from utgiftsanalys.chart_data import monthly_actuals, monthly_with_predictions
+from utgiftsanalys.db import DEFAULT_DB_PATH, fetch_accounts, fetch_months, get_connection, init_db
+from utgiftsanalys.importer import import_file
+from utgiftsanalys.predictor import next_month, predict_month
+from utgiftsanalys.recurring import build_patterns
+from utgiftsanalys.stats import compute_stats
 
 
 # ── DB connection ─────────────────────────────────────────────────────────────
