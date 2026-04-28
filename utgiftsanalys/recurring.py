@@ -31,21 +31,29 @@ class OneOff:
     amount: float
 
 
-def _detect_cadence(dates: list[date]) -> str | None:
-    if len(dates) < 2:
+def _detect_cadence(analysis_months: list[str]) -> str | None:
+    """Detect cadence from a list of YYYY-MM analysis_month strings.
+
+    Deduplicates by month, computes integer month gaps, then classifies by
+    checking whether >50% of gaps fall within one month of the expected period.
+    """
+    def _to_int(ym: str) -> int:
+        return int(ym[:4]) * 12 + int(ym[5:7])
+
+    unique = sorted(set(_to_int(m) for m in analysis_months))
+    if len(unique) < 2:
         return None
-    gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
-    mean = statistics.mean(gaps)
-    if len(gaps) >= 2:
-        stdev = statistics.stdev(gaps)
-        if stdev >= 0.30 * mean:
-            return None
-    if 25 <= mean <= 35:
-        return "monthly"
-    if 80 <= mean <= 100:
-        return "quarterly"
-    if 330 <= mean <= 400:
-        return "yearly"
+
+    gaps = [unique[i + 1] - unique[i] for i in range(len(unique) - 1)]
+
+    for cadence, expected, tolerance in [
+        ("monthly",   1,  0),
+        ("quarterly", 3,  1),
+        ("yearly",   12,  2),
+    ]:
+        matching = sum(1 for g in gaps if abs(g - expected) <= tolerance)
+        if matching / len(gaps) > 0.5:
+            return cadence
     return None
 
 
@@ -95,7 +103,7 @@ def build_patterns(
         dates = [date.fromisoformat(t["booking_date"]) for t in txs_sorted]
         amounts = [t["amount"] for t in txs_sorted]
 
-        cadence = _detect_cadence(dates)
+        cadence = _detect_cadence([t["analysis_month"] for t in txs_sorted])
         if cadence is None:
             for tx in txs:
                 one_offs.append(

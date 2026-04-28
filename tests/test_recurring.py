@@ -130,6 +130,41 @@ def test_start_date_is_first_occurrence():
     assert patterns[0].start_date == base
 
 
+def test_multiple_line_items_per_month_detected_as_monthly():
+    """Multiple transactions on the same date (e.g. Lf Uppsala) must not break detection."""
+    conn = _make_conn()
+    base = date(2025, 1, 2)
+    for month in range(6):
+        booking = date(2025, 1 + month, 2)
+        for amount in [-182.0, -186.0, -195.0]:
+            _add_tx(conn, "Lf Uppsala", "Lf Uppsala", amount, booking)
+    patterns, one_offs = build_patterns(conn, reference_date=date(2025, 8, 1))
+    assert len(patterns) == 1
+    assert patterns[0].cadence == "monthly"
+    assert len(one_offs) == 0
+
+
+def test_quarterly_with_noisy_early_occurrences():
+    """Quarterly pattern with some consecutive-month noise (e.g. U A VA) must be detected."""
+    conn = _make_conn()
+    # Mostly quarterly (3-month) gaps but a few 1-month gaps mixed in
+    months_and_ams = [
+        (date(2024, 4, 2),  "2024-03"),
+        (date(2024, 4, 30), "2024-04"),
+        (date(2024, 9, 2),  "2024-08"),
+        (date(2024, 12, 2), "2024-11"),
+        (date(2025, 3, 3),  "2025-02"),
+        (date(2025, 6, 2),  "2025-05"),
+        (date(2025, 9, 1),  "2025-08"),
+    ]
+    for booking, am in months_and_ams:
+        _add_tx(conn, "U A VA", "U A VA", -2800.0, booking, analysis_month=am)
+    patterns, one_offs = build_patterns(conn, reference_date=date(2025, 10, 1))
+    assert len(patterns) == 1
+    assert patterns[0].cadence == "quarterly"
+    assert len(one_offs) == 0
+
+
 def test_deposits_excluded():
     conn = _make_conn()
     base = date(2025, 1, 15)
