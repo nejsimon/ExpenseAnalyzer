@@ -1,14 +1,12 @@
 import sqlite3
 import statistics
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import Literal
 
 from .db import fetch_group_members, fetch_groups, fetch_transactions
 
-AmountClassification = (
-    tuple[Literal["fixed"], float] | tuple[Literal["variable"], float, float]
-)
+AmountClassification = tuple[Literal["fixed"], float] | tuple[Literal["variable"], float, float]
 
 _PERIOD_DAYS = {"monthly": 30, "quarterly": 91, "yearly": 365}
 
@@ -43,6 +41,7 @@ def _detect_cadence(analysis_months: list[str]) -> str | None:
     Deduplicates by month, computes integer month gaps, then classifies by
     checking whether >50% of gaps fall within one month of the expected period.
     """
+
     def _to_int(ym: str) -> int:
         return int(ym[:4]) * 12 + int(ym[5:7])
 
@@ -53,9 +52,9 @@ def _detect_cadence(analysis_months: list[str]) -> str | None:
     gaps = [unique[i + 1] - unique[i] for i in range(len(unique) - 1)]
 
     for cadence, expected, tolerance in [
-        ("monthly",   1,  0),
-        ("quarterly", 3,  1),
-        ("yearly",   12,  2),
+        ("monthly", 1, 0),
+        ("quarterly", 3, 1),
+        ("yearly", 12, 2),
     ]:
         matching = sum(1 for g in gaps if abs(g - expected) <= tolerance)
         if matching / len(gaps) > 0.5:
@@ -127,12 +126,14 @@ def build_patterns(
         cadence = _detect_cadence(synthetic_months)
         if cadence is None:
             for tx in all_group_txs:
-                one_offs.append(OneOff(
-                    reference=grp["name"],
-                    description=grp["name"],
-                    booking_date=date.fromisoformat(tx["booking_date"]),
-                    amount=tx["amount"],
-                ))
+                one_offs.append(
+                    OneOff(
+                        reference=grp["name"],
+                        description=grp["name"],
+                        booking_date=date.fromisoformat(tx["booking_date"]),
+                        amount=tx["amount"],
+                    )
+                )
             continue
 
         classification = _classify_amounts(synthetic_amounts)
@@ -149,20 +150,22 @@ def build_patterns(
         status = "canceled" if (today - last_seen).days > 1.5 * period else "active"
         end_date = last_seen if status == "canceled" else None
 
-        patterns.append(RecurringPattern(
-            reference=grp["name"],
-            description=grp["name"],
-            cadence=cadence,
-            amount_type=amount_type,
-            fixed_amount=fixed_amount,
-            min_amount=min_amount,
-            max_amount=max_amount,
-            start_date=min(all_dates),
-            end_date=end_date,
-            status=status,
-            amounts=synthetic_amounts,
-            color=grp["color"],
-        ))
+        patterns.append(
+            RecurringPattern(
+                reference=grp["name"],
+                description=grp["name"],
+                cadence=cadence,
+                amount_type=amount_type,
+                fixed_amount=fixed_amount,
+                min_amount=min_amount,
+                max_amount=max_amount,
+                start_date=min(all_dates),
+                end_date=end_date,
+                status=status,
+                amounts=synthetic_amounts,
+                color=grp["color"],
+            )
+        )
 
     # ── Per-key phase: individual transaction keys not claimed by any group ───
     key_groups: dict[tuple[str, str], list[sqlite3.Row]] = {}

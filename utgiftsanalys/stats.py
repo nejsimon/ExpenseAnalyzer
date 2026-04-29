@@ -2,7 +2,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
-from .db import fetch_transactions, fetch_months
+from .db import fetch_months, fetch_transactions
 from .predictor import predict_month
 from .recurring import build_patterns
 
@@ -15,8 +15,8 @@ class YearStats:
     actual_months: int
     avg_expense: float
     avg_income: float
-    predicted_expense_remaining: float | None   # None for past years
-    predicted_income_remaining: float | None    # None until spec 11
+    predicted_expense_remaining: float | None  # None for past years
+    predicted_income_remaining: float | None  # None until spec 11
 
 
 def compute_stats(conn: sqlite3.Connection, account: str | None = None) -> list[YearStats]:
@@ -51,27 +51,31 @@ def compute_stats(conn: sqlite3.Connection, account: str | None = None) -> list[
 
         if year == current_year:
             remaining = [
-                f"{year}-{m:02d}" for m in range(1, 13)
-                if f"{year}-{m:02d}" not in all_months_in_db
+                f"{year}-{m:02d}" for m in range(1, 13) if f"{year}-{m:02d}" not in all_months_in_db
             ]
             predicted_expense = sum(
                 sum(line.predicted_amount for line in predict_month(exp_patterns, ym))
                 for ym in remaining
             )
-            predicted_income = sum(
-                sum(line.predicted_amount for line in predict_month(inc_patterns, ym))
-                for ym in remaining
-            ) or None
+            predicted_income = (
+                sum(
+                    sum(line.predicted_amount for line in predict_month(inc_patterns, ym))
+                    for ym in remaining
+                )
+                or None
+            )
 
-        result.append(YearStats(
-            year=year,
-            actual_expense=actual_expense,
-            actual_income=actual_income,
-            actual_months=actual_months,
-            avg_expense=avg_expense,
-            avg_income=avg_income,
-            predicted_expense_remaining=predicted_expense,
-            predicted_income_remaining=predicted_income,
-        ))
+        result.append(
+            YearStats(
+                year=year,
+                actual_expense=actual_expense,
+                actual_income=actual_income,
+                actual_months=actual_months,
+                avg_expense=avg_expense,
+                avg_income=avg_income,
+                predicted_expense_remaining=predicted_expense,
+                predicted_income_remaining=predicted_income,
+            )
+        )
 
     return result

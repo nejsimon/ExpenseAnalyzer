@@ -43,10 +43,12 @@ def monthly_with_predictions(
     for rec in monthly_actuals(conn, account=account):
         month = rec["month"]
         predicted = sum(line.predicted_amount for line in predict_month(exp_patterns, month))
-        rows.append({
-            "month": month,
-            "actual_expenses": rec["expenses"],
-            "predicted_expenses": predicted,
-            "deviation": predicted - rec["expenses"],
-        })
+        rows.append(
+            {
+                "month": month,
+                "actual_expenses": rec["expenses"],
+                "predicted_expenses": predicted,
+                "deviation": predicted - rec["expenses"],
+            }
+        )
     return rows

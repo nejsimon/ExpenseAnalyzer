@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+
 import holidays
 
 
@@ -12,7 +13,7 @@ def _extra_bank_free_days(year: int) -> set[date]:
     # Midsommardagen is the Saturday between Jun 20–26.
     for day in range(20, 27):
         d = date(year, 6, day)
-        if d.weekday() == 5:          # Saturday = Midsommardagen
+        if d.weekday() == 5:  # Saturday = Midsommardagen
             extra.add(d - timedelta(days=1))  # Friday before = Midsommarafton
             break
     return extra

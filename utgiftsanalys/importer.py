@@ -3,7 +3,6 @@ import hashlib
 import sqlite3
 import sys
 from datetime import date
-from pathlib import Path
 from typing import Any, cast
 
 import chardet
@@ -34,7 +33,9 @@ def detect_encoding(path: str) -> str:
     return "utf-8"
 
 
-def _compute_hash(booking_date: str, reference: str, description: str, amount: str, account: str) -> str:
+def _compute_hash(
+    booking_date: str, reference: str, description: str, amount: str, account: str
+) -> str:
     key = f"{booking_date}|{reference}|{description}|{amount}|{account}"
     return hashlib.sha256(key.encode()).hexdigest()
 
@@ -103,7 +104,7 @@ def detect_holes(batch: list[TransactionDict]) -> list[str]:
                 key = (tx["reference"] or "", tx["description"] or "")
                 groups.setdefault(key, set()).add(tx["analysis_month"])
 
-        for (ref, desc), months in groups.items():
+        for (_ref, desc), months in groups.items():
             for m in sorted(months):
                 middle = add_months(m, 1)
                 after = add_months(m, 2)
@@ -147,7 +148,7 @@ def import_file(
     with open(path, encoding=encoding, newline="") as f:
         all_lines = f.readlines()
 
-    lines = all_lines[_find_header_line(all_lines):]
+    lines = all_lines[_find_header_line(all_lines) :]
 
     batch: list[TransactionDict] = []
     reader = csv.DictReader(lines, delimiter=adapter.delimiter if adapter else ",")

@@ -65,7 +65,7 @@ def predict_month(
             )
         )
 
-    lines.sort(key=lambda l: (l.cadence, l.description))
+    lines.sort(key=lambda ln: (ln.cadence, ln.description))
     return lines
 
 

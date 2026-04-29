@@ -5,11 +5,26 @@ import click
 
 from .adapters import ADAPTERS, AmbiguousAdapterError
 from .db import (
-    DEFAULT_DB_PATH, add_group_member, delete_group, fetch_accounts,
-    fetch_groups, get_connection, init_db, insert_group, remove_group_member,
+    DEFAULT_DB_PATH,
+    add_group_member,
+    delete_group,
+    fetch_accounts,
+    fetch_groups,
+    get_connection,
+    init_db,
+    insert_group,
+    remove_group_member,
 )
 from .importer import import_file
-from .output import render_accounts, render_adapters, render_groups, render_import_result, render_prediction, render_recurring_summary, render_stats
+from .output import (
+    render_accounts,
+    render_adapters,
+    render_groups,
+    render_import_result,
+    render_prediction,
+    render_recurring_summary,
+    render_stats,
+)
 from .predictor import next_month, predict_month
 from .recurring import build_patterns
 from .stats import compute_stats
@@ -34,7 +49,9 @@ def main(ctx: click.Context, db: str, account: str | None) -> None:
 @main.command("import")
 @click.argument("file", type=click.Path(exists=True))
 @click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
-@click.option("--adapter", "adapter_name", default=None, help="Adapter name (skips auto-detection).")
+@click.option(
+    "--adapter", "adapter_name", default=None, help="Adapter name (skips auto-detection)."
+)
 @click.pass_context
 def import_cmd(ctx: click.Context, file: str, fmt: str, adapter_name: str | None) -> None:
     """Import transactions from a CSV file."""
@@ -71,7 +88,9 @@ def adapters_cmd(fmt: str) -> None:
 @main.command()
 @click.option("--month", default=None, help="Analysis month YYYY-MM (default: current month).")
 @click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
-@click.option("--deposits-only", is_flag=True, default=False, help="Show only the income/deposits section.")
+@click.option(
+    "--deposits-only", is_flag=True, default=False, help="Show only the income/deposits section."
+)
 @click.pass_context
 def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool) -> None:
     """Show recurring patterns and one-offs."""
@@ -87,7 +106,9 @@ def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool
     conn.close()
     exp_one_offs = [o for o in exp_one_offs if str(o.booking_date)[:7] == month]
     inc_one_offs = [o for o in inc_one_offs if str(o.booking_date)[:7] == month]
-    render_recurring_summary(exp_patterns, exp_one_offs, inc_patterns, inc_one_offs, fmt, deposits_only)
+    render_recurring_summary(
+        exp_patterns, exp_one_offs, inc_patterns, inc_one_offs, fmt, deposits_only
+    )
 
 
 @main.command()
@@ -163,6 +184,7 @@ def groups_list(ctx: click.Context, direction: str | None, fmt: str) -> None:
 def groups_add(ctx: click.Context, name: str, direction: str, color: str) -> None:
     """Create a group."""
     import sqlite3 as _sqlite3
+
     ctx_obj = cast(ContextObject, ctx.obj)
     conn = get_connection(ctx_obj["db"])
     init_db(conn)
@@ -203,6 +225,7 @@ def groups_remove(ctx: click.Context, name: str, confirm: bool) -> None:
 def groups_add_member(ctx: click.Context, name: str, reference: str, description: str) -> None:
     """Add a (reference, description) key to a group."""
     import sqlite3 as _sqlite3
+
     ctx_obj = cast(ContextObject, ctx.obj)
     conn = get_connection(ctx_obj["db"])
     init_db(conn)
@@ -245,6 +268,7 @@ def reset(ctx: click.Context, confirm: bool) -> None:
         click.echo("Pass --confirm to reset the database.")
         return
     import os
+
     ctx_obj = cast(ContextObject, ctx.obj)
     db_path = ctx_obj["db"]
     if os.path.exists(db_path):

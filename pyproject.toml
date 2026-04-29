@@ -24,6 +24,7 @@ dev = [
     "mypy>=1.10",
     "types-tabulate",
     "pre-commit>=3.7",
+    "ruff>=0.4",
 ]
 
 [dependency-groups]
@@ -39,3 +40,12 @@ exclude = ["tests/"]
 [[tool.mypy.overrides]]
 module = ["holidays.*", "chardet.*", "pandas.*"]
 ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "N"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["utgiftsanalys"]

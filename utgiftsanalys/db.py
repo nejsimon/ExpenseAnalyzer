@@ -4,20 +4,21 @@ from typing import TypedDict
 
 
 class TransactionDict(TypedDict):
-    row_number:       int | None
-    clearing:         str | None
-    account:          str | None
-    product:          str | None
-    currency:         str | None
-    booking_date:     str
+    row_number: int | None
+    clearing: str | None
+    account: str | None
+    product: str | None
+    currency: str | None
+    booking_date: str
     transaction_date: str | None
-    value_date:       str | None
-    reference:        str | None
-    description:      str | None
-    amount:           float
-    balance:          float | None
-    import_hash:      str
-    analysis_month:   str
+    value_date: str | None
+    reference: str | None
+    description: str | None
+    amount: float
+    balance: float | None
+    import_hash: str
+    analysis_month: str
+
 
 DEFAULT_DB_PATH = str(Path(__file__).parent.parent / "data" / "utgiftsanalys.db")
 
@@ -148,9 +149,7 @@ def fetch_group_members(
     group_id: int,
 ) -> list[sqlite3.Row]:
     """Return (reference, description) rows for a group."""
-    return conn.execute(
-        "SELECT * FROM group_members WHERE group_id = ?", (group_id,)
-    ).fetchall()
+    return conn.execute("SELECT * FROM group_members WHERE group_id = ?", (group_id,)).fetchall()
 
 
 def insert_group(

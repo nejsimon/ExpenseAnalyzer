@@ -7,3 +7,17 @@ repos:
         entry: uv run mypy utgiftsanalys/
         types: [python]
         pass_filenames: false
+
+      - id: ruff-check
+        name: ruff lint
+        language: system
+        entry: uv run ruff check utgiftsanalys/
+        types: [python]
+        pass_filenames: false
+
+      - id: ruff-format
+        name: ruff format check
+        language: system
+        entry: uv run ruff format --check utgiftsanalys/
+        types: [python]
+        pass_filenames: false

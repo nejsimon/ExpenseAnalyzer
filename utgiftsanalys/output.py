@@ -33,10 +33,7 @@ def _render_pattern_section(
         for p in patterns
     ]
     rec_headers = ["Merchant", "Cadence", "Amount", "Start", "Status"]
-    off_rows = [
-        [o.description, str(o.booking_date), f"{abs(o.amount):.2f}"]
-        for o in one_offs
-    ]
+    off_rows = [[o.description, str(o.booking_date), f"{abs(o.amount):.2f}"] for o in one_offs]
     off_headers = ["Merchant", "Date", "Amount"]
 
     if fmt == "csv":
@@ -51,12 +48,16 @@ def _render_pattern_section(
     else:
         print(f"=== {title} ===")
         if rec_rows:
-            print(tabulate(rec_rows, headers=rec_headers, tablefmt="rounded_outline", floatfmt=".2f"))
+            print(
+                tabulate(rec_rows, headers=rec_headers, tablefmt="rounded_outline", floatfmt=".2f")
+            )
         else:
             print("  (none)")
         print(f"\nOne-offs ({title})")
         if off_rows:
-            print(tabulate(off_rows, headers=off_headers, tablefmt="rounded_outline", floatfmt=".2f"))
+            print(
+                tabulate(off_rows, headers=off_headers, tablefmt="rounded_outline", floatfmt=".2f")
+            )
         else:
             print("  (none)")
         print()
@@ -82,10 +83,14 @@ def render_prediction(
     fmt: str = "table",
 ) -> None:
     detail_headers = ["Merchant", "Cadence", "Predicted (SEK)", "Range"]
-    exp_rows = [[l.description, l.cadence, f"{l.predicted_amount:.2f}", l.range_str] for l in exp_lines]
-    inc_rows = [[l.description, l.cadence, f"{l.predicted_amount:.2f}", l.range_str] for l in inc_lines]
-    exp_total = sum(l.predicted_amount for l in exp_lines)
-    inc_total = sum(l.predicted_amount for l in inc_lines)
+    exp_rows = [
+        [ln.description, ln.cadence, f"{ln.predicted_amount:.2f}", ln.range_str] for ln in exp_lines
+    ]
+    inc_rows = [
+        [ln.description, ln.cadence, f"{ln.predicted_amount:.2f}", ln.range_str] for ln in inc_lines
+    ]
+    exp_total = sum(ln.predicted_amount for ln in exp_lines)
+    inc_total = sum(ln.predicted_amount for ln in inc_lines)
     net = inc_total - exp_total
 
     if fmt == "csv":
@@ -111,12 +116,20 @@ def render_prediction(
             return
         print("\nExpenses")
         if exp_rows:
-            print(tabulate(exp_rows, headers=detail_headers, tablefmt="rounded_outline", floatfmt=".2f"))
+            print(
+                tabulate(
+                    exp_rows, headers=detail_headers, tablefmt="rounded_outline", floatfmt=".2f"
+                )
+            )
         else:
             print("  (none)")
         print("\nIncome")
         if inc_rows:
-            print(tabulate(inc_rows, headers=detail_headers, tablefmt="rounded_outline", floatfmt=".2f"))
+            print(
+                tabulate(
+                    inc_rows, headers=detail_headers, tablefmt="rounded_outline", floatfmt=".2f"
+                )
+            )
         else:
             print("  (none)")
         summary_rows = [
@@ -125,7 +138,14 @@ def render_prediction(
             ["Net", f"{net:.2f}"],
         ]
         print()
-        print(tabulate(summary_rows, headers=["", "Predicted (SEK)"], tablefmt="rounded_outline", floatfmt=".2f"))
+        print(
+            tabulate(
+                summary_rows,
+                headers=["", "Predicted (SEK)"],
+                tablefmt="rounded_outline",
+                floatfmt=".2f",
+            )
+        )
 
 
 def render_stats(stats: list[YearStats], fmt: str = "table") -> None:
@@ -134,7 +154,11 @@ def render_stats(stats: list[YearStats], fmt: str = "table") -> None:
 
     def _est_full(s: YearStats, direction: str) -> str:
         actual = s.actual_expense if direction == "expense" else s.actual_income
-        pred = s.predicted_expense_remaining if direction == "expense" else s.predicted_income_remaining
+        pred = (
+            s.predicted_expense_remaining
+            if direction == "expense"
+            else s.predicted_income_remaining
+        )
         if pred is None:
             return f"{actual:.2f}"
         return f"{actual + pred:.2f}"
@@ -146,17 +170,23 @@ def render_stats(stats: list[YearStats], fmt: str = "table") -> None:
         for s in stats:
             actual = s.actual_expense if direction == "expense" else s.actual_income
             avg = s.avg_expense if direction == "expense" else s.avg_income
-            pred = s.predicted_expense_remaining if direction == "expense" else s.predicted_income_remaining
+            pred = (
+                s.predicted_expense_remaining
+                if direction == "expense"
+                else s.predicted_income_remaining
+            )
             if actual == 0 and pred is None:
                 continue
-            rows.append([
-                str(s.year),
-                f"{actual:.2f}",
-                str(s.actual_months),
-                f"{avg:.2f}",
-                _fmt_pred(pred),
-                _est_full(s, direction),
-            ])
+            rows.append(
+                [
+                    str(s.year),
+                    f"{actual:.2f}",
+                    str(s.actual_months),
+                    f"{avg:.2f}",
+                    _fmt_pred(pred),
+                    _est_full(s, direction),
+                ]
+            )
         return rows
 
     expense_rows = _rows("expense")
@@ -175,12 +205,16 @@ def render_stats(stats: list[YearStats], fmt: str = "table") -> None:
     else:
         print("Expenses")
         if expense_rows:
-            print(tabulate(expense_rows, headers=headers, tablefmt="rounded_outline", floatfmt=".2f"))
+            print(
+                tabulate(expense_rows, headers=headers, tablefmt="rounded_outline", floatfmt=".2f")
+            )
         else:
             print("  (no data)")
         if income_rows:
             print("\nIncome")
-            print(tabulate(income_rows, headers=headers, tablefmt="rounded_outline", floatfmt=".2f"))
+            print(
+                tabulate(income_rows, headers=headers, tablefmt="rounded_outline", floatfmt=".2f")
+            )
 
 
 def render_accounts(accounts: list[tuple[str, int]], fmt: str = "table") -> None:

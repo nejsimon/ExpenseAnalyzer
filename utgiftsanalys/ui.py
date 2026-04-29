@@ -8,20 +8,33 @@ import pandas as pd
 import streamlit as st
 
 from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
-from utgiftsanalys.chart_data import MonthActual, MonthPrediction, monthly_actuals, monthly_with_predictions
+from utgiftsanalys.chart_data import (
+    MonthActual,
+    MonthPrediction,
+    monthly_actuals,
+    monthly_with_predictions,
+)
 from utgiftsanalys.db import (
-    DEFAULT_DB_PATH, add_group_member, delete_group,
-    fetch_accounts, fetch_group_members, fetch_groups,
-    fetch_months, fetch_transactions, get_connection, init_db,
-    insert_group, remove_group_member,
+    DEFAULT_DB_PATH,
+    add_group_member,
+    delete_group,
+    fetch_accounts,
+    fetch_group_members,
+    fetch_groups,
+    fetch_months,
+    fetch_transactions,
+    get_connection,
+    init_db,
+    insert_group,
+    remove_group_member,
 )
 from utgiftsanalys.importer import import_file
 from utgiftsanalys.predictor import PredictionLine, next_month, predict_month
 from utgiftsanalys.recurring import OneOff, RecurringPattern, build_patterns
 from utgiftsanalys.stats import YearStats, compute_stats
 
-
 # ── DB connection ─────────────────────────────────────────────────────────────
+
 
 def _db_path() -> str:
     return os.environ.get("UTGIFTSANALYS_DB", DEFAULT_DB_PATH)
@@ -36,6 +49,7 @@ def _get_conn() -> sqlite3.Connection:
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
+
 def _sidebar(conn: sqlite3.Connection) -> str | None:
     st.sidebar.title("Utgiftsanalys")
     st.sidebar.info(f"DB: {_db_path()}")
@@ -48,6 +62,7 @@ def _sidebar(conn: sqlite3.Connection) -> str | None:
 
 # ── Tab: Import ───────────────────────────────────────────────────────────────
 
+
 def _tab_import(conn: sqlite3.Connection) -> None:
     st.header("Import transactions")
     uploaded = st.file_uploader("Choose a CSV file", type=["csv"])
@@ -57,8 +72,10 @@ def _tab_import(conn: sqlite3.Connection) -> None:
     if uploaded is None:
         return
 
-    chosen_adapter = None if adapter_choice == "Auto-detect" else next(
-        a for a in ADAPTERS if a.name == adapter_choice
+    chosen_adapter = (
+        None
+        if adapter_choice == "Auto-detect"
+        else next(a for a in ADAPTERS if a.name == adapter_choice)
     )
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
@@ -90,6 +107,7 @@ def _tab_import(conn: sqlite3.Connection) -> None:
 
 # ── Tab: Analyze ──────────────────────────────────────────────────────────────
 
+
 def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
     rows = []
     for p in patterns:
@@ -98,21 +116,29 @@ def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
         else:
             amount = f"{p.min_amount:.2f}–{p.max_amount:.2f} (var)"
         status = f"canceled (last: {p.end_date})" if p.status == "canceled" else "active"
-        rows.append({
-            "Merchant": p.description,
-            "Cadence": p.cadence,
-            "Amount": amount,
-            "Start": str(p.start_date)[:7],
-            "Status": status,
-        })
+        rows.append(
+            {
+                "Merchant": p.description,
+                "Cadence": p.cadence,
+                "Amount": amount,
+                "Start": str(p.start_date)[:7],
+                "Status": status,
+            }
+        )
     return pd.DataFrame(rows)
 
 
 def _one_off_df(one_offs: list[OneOff]) -> pd.DataFrame:
-    return pd.DataFrame([
-        {"Merchant": o.description, "Date": str(o.booking_date), "Amount": f"{abs(o.amount):.2f}"}
-        for o in one_offs
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "Merchant": o.description,
+                "Date": str(o.booking_date),
+                "Amount": f"{abs(o.amount):.2f}",
+            }
+            for o in one_offs
+        ]
+    )
 
 
 def _render_recurring_section(
@@ -128,10 +154,12 @@ def _render_recurring_section(
 
     if group_pats:
         grp_map = {g["name"]: g for g in fetch_groups(conn, direction=direction)}
-        outgoing = (direction == "expenses")
+        outgoing = direction == "expenses"
         month_txs = fetch_transactions(
-            conn, month=month,
-            outgoing_only=outgoing, incoming_only=(not outgoing),
+            conn,
+            month=month,
+            outgoing_only=outgoing,
+            incoming_only=(not outgoing),
             account=account,
         )
         for p in group_pats:
@@ -146,15 +174,21 @@ def _render_recurring_section(
                     members = fetch_group_members(conn, grp["id"])
                     member_keys = {(m["reference"], m["description"]) for m in members}
                     member_txs = [
-                        t for t in month_txs
+                        t
+                        for t in month_txs
                         if (t["reference"] or "", t["description"] or "") in member_keys
                     ]
                     if member_txs:
-                        df = pd.DataFrame([{
-                            "Merchant": t["description"],
-                            "Date": t["booking_date"],
-                            "Amount": f"{abs(t['amount']):.2f}",
-                        } for t in member_txs])
+                        df = pd.DataFrame(
+                            [
+                                {
+                                    "Merchant": t["description"],
+                                    "Date": t["booking_date"],
+                                    "Amount": f"{abs(t['amount']):.2f}",
+                                }
+                                for t in member_txs
+                            ]
+                        )
                         st.dataframe(df, hide_index=True, width="stretch")
                     else:
                         st.caption("No transactions this month.")
@@ -206,16 +240,19 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
 
 # ── Tab: Predict ──────────────────────────────────────────────────────────────
 
+
 def _prediction_df(lines: list[PredictionLine]) -> pd.DataFrame:
-    return pd.DataFrame([
-        {
-            "Merchant": line.description,
-            "Cadence": line.cadence,
-            "Predicted (SEK)": f"{line.predicted_amount:.2f}",
-            "Range": line.range_str or "—",
-        }
-        for line in lines
-    ])
+    return pd.DataFrame(
+        [
+            {
+                "Merchant": line.description,
+                "Cadence": line.cadence,
+                "Predicted (SEK)": f"{line.predicted_amount:.2f}",
+                "Range": line.range_str or "—",
+            }
+            for line in lines
+        ]
+    )
 
 
 def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
@@ -264,23 +301,30 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
 
 # ── Tab: Stats ────────────────────────────────────────────────────────────────
 
+
 def _stats_df(year_stats: list[YearStats], direction: str) -> pd.DataFrame:
     rows = []
     for s in year_stats:
         actual = s.actual_expense if direction == "expense" else s.actual_income
         avg = s.avg_expense if direction == "expense" else s.avg_income
-        pred = s.predicted_expense_remaining if direction == "expense" else s.predicted_income_remaining
+        pred = (
+            s.predicted_expense_remaining
+            if direction == "expense"
+            else s.predicted_income_remaining
+        )
         if actual == 0 and pred is None:
             continue
         est_full = f"{actual + pred:.2f}" if pred is not None else f"{actual:.2f}"
-        rows.append({
-            "Year": s.year,
-            "Actual": f"{actual:.2f}",
-            "Months": s.actual_months,
-            "Avg/month": f"{avg:.2f}",
-            "Predicted remaining": f"{pred:.2f}" if pred is not None else "—",
-            "Est. full year": est_full,
-        })
+        rows.append(
+            {
+                "Year": s.year,
+                "Actual": f"{actual:.2f}",
+                "Months": s.actual_months,
+                "Avg/month": f"{avg:.2f}",
+                "Predicted remaining": f"{pred:.2f}" if pred is not None else "—",
+                "Est. full year": est_full,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -308,6 +352,7 @@ def _tab_stats(conn: sqlite3.Connection, account: str | None) -> None:
 
 # ── Tab: Accounts ─────────────────────────────────────────────────────────────
 
+
 def _tab_accounts(conn: sqlite3.Connection) -> None:
     st.header("Accounts")
     accounts = fetch_accounts(conn)
@@ -319,6 +364,7 @@ def _tab_accounts(conn: sqlite3.Connection) -> None:
 
 
 # ── Tab: Charts ──────────────────────────────────────────────────────────────
+
 
 @st.cache_data(ttl=60)
 def _cached_actuals(db_path: str, account: str | None) -> list[MonthActual]:
@@ -401,10 +447,12 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
         var_name="series",
         value_name="SEK",
     )
-    df_long["series"] = df_long["series"].map({
-        "actual_expenses": "Actual",
-        "predicted_expenses": "Predicted",
-    })
+    df_long["series"] = df_long["series"].map(
+        {
+            "actual_expenses": "Actual",
+            "predicted_expenses": "Predicted",
+        }
+    )
     chart3 = (
         alt.Chart(df_long)
         .mark_line(point=True)
@@ -421,8 +469,8 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     st.subheader("Prediction deviation (predicted − actual)")
     deviation_color = alt.condition(
         alt.datum.deviation > 0,
-        alt.value("#e74c3c"),   # red = over-predicted
-        alt.value("#2ecc71"),   # green = under-predicted
+        alt.value("#e74c3c"),  # red = over-predicted
+        alt.value("#2ecc71"),  # green = under-predicted
     )
     chart4 = (
         alt.Chart(df_pred)
@@ -439,9 +487,12 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
 
 # ── Tab: Groups ──────────────────────────────────────────────────────────────
 
+
 def _tab_groups(conn: sqlite3.Connection) -> None:
     st.header("Groups")
-    st.caption("Combine transactions into a named group for unified recurring detection and charting.")
+    st.caption(
+        "Combine transactions into a named group for unified recurring detection and charting."
+    )
 
     with st.expander("➕ Create new group"):
         with st.form("create_group_form"):
@@ -495,24 +546,21 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
 
             # Add members
             outgoing = grp["direction"] == "expenses"
-            all_txs = fetch_transactions(
-                conn, outgoing_only=outgoing, incoming_only=(not outgoing)
-            )
+            all_txs = fetch_transactions(conn, outgoing_only=outgoing, incoming_only=(not outgoing))
             existing_keys = {(m["reference"], m["description"]) for m in members}
             known_pairs = sorted(
                 {(t["reference"] or "", t["description"] or "") for t in all_txs},
                 key=lambda k: k[1].lower(),
             )
-            available = [(ref, desc) for ref, desc in known_pairs if (ref, desc) not in existing_keys]
+            available = [
+                (ref, desc) for ref, desc in known_pairs if (ref, desc) not in existing_keys
+            ]
             if available:
-                labels = [
-                    desc if ref == desc else f"{ref} / {desc}"
-                    for ref, desc in available
-                ]
+                labels = [desc if ref == desc else f"{ref} / {desc}" for ref, desc in available]
                 with st.form(key=f"add_members_form_{grp['id']}"):
                     selected = st.multiselect("Add members", labels)
                     if st.form_submit_button("Add selected"):
-                        label_to_pair = dict(zip(labels, available))
+                        label_to_pair = dict(zip(labels, available, strict=True))
                         added = 0
                         for lbl in selected:
                             ref, desc = label_to_pair[lbl]
@@ -529,6 +577,7 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     st.set_page_config(page_title="Utgiftsanalys", page_icon="💰", layout="wide")

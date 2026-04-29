@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -20,18 +20,18 @@ SwedBankAdapter = CsvAdapter(
     name="swedbank",
     required_columns=["Bokföringsdag", "Beskrivning", "Belopp", "Kontonummer"],
     column_map={
-        "Radnummer":       "row_number",
-        "Clearingnummer":  "clearing",
-        "Kontonummer":     "account",
-        "Produkt":         "product",
-        "Valuta":          "currency",
-        "Bokföringsdag":   "booking_date",
+        "Radnummer": "row_number",
+        "Clearingnummer": "clearing",
+        "Kontonummer": "account",
+        "Produkt": "product",
+        "Valuta": "currency",
+        "Bokföringsdag": "booking_date",
         "Transaktionsdag": "transaction_date",
-        "Valutadag":       "value_date",
-        "Referens":        "reference",
-        "Beskrivning":     "description",
-        "Belopp":          "amount",
-        "Bokfört saldo":   "balance",
+        "Valutadag": "value_date",
+        "Referens": "reference",
+        "Beskrivning": "description",
+        "Belopp": "amount",
+        "Bokfört saldo": "balance",
     },
     delimiter=",",
     decimal_sep=".",
