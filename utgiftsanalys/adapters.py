@@ -43,7 +43,7 @@ ADAPTERS: list[CsvAdapter] = [SwedBankAdapter]
 def detect_adapter(
     headers: list[str],
     adapters: list[CsvAdapter] | None = None,
-) -> "CsvAdapter | list[CsvAdapter]":
+) -> CsvAdapter | list[CsvAdapter]:
     """Return one CsvAdapter, a list if ambiguous, or raise ValueError if none match."""
     if adapters is None:
         adapters = ADAPTERS

@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
-from utgiftsanalys.chart_data import monthly_actuals, monthly_with_predictions
+from utgiftsanalys.chart_data import MonthActual, MonthPrediction, monthly_actuals, monthly_with_predictions
 from utgiftsanalys.db import (
     DEFAULT_DB_PATH, add_group_member, delete_group,
     fetch_accounts, fetch_group_members, fetch_groups,
@@ -16,9 +16,9 @@ from utgiftsanalys.db import (
     insert_group, remove_group_member,
 )
 from utgiftsanalys.importer import import_file
-from utgiftsanalys.predictor import next_month, predict_month
-from utgiftsanalys.recurring import build_patterns
-from utgiftsanalys.stats import compute_stats
+from utgiftsanalys.predictor import PredictionLine, next_month, predict_month
+from utgiftsanalys.recurring import OneOff, RecurringPattern, build_patterns
+from utgiftsanalys.stats import YearStats, compute_stats
 
 
 # ── DB connection ─────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ def _db_path() -> str:
 
 
 @st.cache_resource
-def _get_conn():
+def _get_conn() -> sqlite3.Connection:
     conn = get_connection(_db_path())
     init_db(conn)
     return conn
@@ -36,7 +36,7 @@ def _get_conn():
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
-def _sidebar(conn) -> str | None:
+def _sidebar(conn: sqlite3.Connection) -> str | None:
     st.sidebar.title("Utgiftsanalys")
     st.sidebar.info(f"DB: {_db_path()}")
 
@@ -48,7 +48,7 @@ def _sidebar(conn) -> str | None:
 
 # ── Tab: Import ───────────────────────────────────────────────────────────────
 
-def _tab_import(conn) -> None:
+def _tab_import(conn: sqlite3.Connection) -> None:
     st.header("Import transactions")
     uploaded = st.file_uploader("Choose a CSV file", type=["csv"])
     adapter_names = ["Auto-detect"] + [a.name for a in ADAPTERS]
@@ -90,7 +90,7 @@ def _tab_import(conn) -> None:
 
 # ── Tab: Analyze ──────────────────────────────────────────────────────────────
 
-def _pattern_df(patterns) -> pd.DataFrame:
+def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
     rows = []
     for p in patterns:
         if p.amount_type == "fixed":
@@ -108,7 +108,7 @@ def _pattern_df(patterns) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _one_off_df(one_offs) -> pd.DataFrame:
+def _one_off_df(one_offs: list[OneOff]) -> pd.DataFrame:
     return pd.DataFrame([
         {"Merchant": o.description, "Date": str(o.booking_date), "Amount": f"{abs(o.amount):.2f}"}
         for o in one_offs
@@ -116,8 +116,8 @@ def _one_off_df(one_offs) -> pd.DataFrame:
 
 
 def _render_recurring_section(
-    conn,
-    patterns: list,
+    conn: sqlite3.Connection,
+    patterns: list[RecurringPattern],
     direction: str,
     month: str,
     account: str | None,
@@ -166,7 +166,7 @@ def _render_recurring_section(
         st.caption("(none)")
 
 
-def _tab_analyze(conn, account: str | None) -> None:
+def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Analyze")
     months = fetch_months(conn, account=account)
     if not months:
@@ -206,19 +206,19 @@ def _tab_analyze(conn, account: str | None) -> None:
 
 # ── Tab: Predict ──────────────────────────────────────────────────────────────
 
-def _prediction_df(lines) -> pd.DataFrame:
+def _prediction_df(lines: list[PredictionLine]) -> pd.DataFrame:
     return pd.DataFrame([
         {
-            "Merchant": l.description,
-            "Cadence": l.cadence,
-            "Predicted (SEK)": f"{l.predicted_amount:.2f}",
-            "Range": l.range_str or "—",
+            "Merchant": line.description,
+            "Cadence": line.cadence,
+            "Predicted (SEK)": f"{line.predicted_amount:.2f}",
+            "Range": line.range_str or "—",
         }
-        for l in lines
+        for line in lines
     ])
 
 
-def _tab_predict(conn, account: str | None) -> None:
+def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Predict")
     today = date.today()
     default_month = next_month(today)
@@ -239,8 +239,8 @@ def _tab_predict(conn, account: str | None) -> None:
     inc_patterns, _ = build_patterns(conn, account=account, direction="income")
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
-    exp_total = sum(l.predicted_amount for l in exp_lines)
-    inc_total = sum(l.predicted_amount for l in inc_lines)
+    exp_total = sum(line.predicted_amount for line in exp_lines)
+    inc_total = sum(line.predicted_amount for line in inc_lines)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Expenses", f"{exp_total:,.2f} SEK")
@@ -264,7 +264,7 @@ def _tab_predict(conn, account: str | None) -> None:
 
 # ── Tab: Stats ────────────────────────────────────────────────────────────────
 
-def _stats_df(year_stats, direction: str) -> pd.DataFrame:
+def _stats_df(year_stats: list[YearStats], direction: str) -> pd.DataFrame:
     rows = []
     for s in year_stats:
         actual = s.actual_expense if direction == "expense" else s.actual_income
@@ -284,7 +284,7 @@ def _stats_df(year_stats, direction: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _tab_stats(conn, account: str | None) -> None:
+def _tab_stats(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Stats")
     year_stats = compute_stats(conn, account=account)
     if not year_stats:
@@ -308,7 +308,7 @@ def _tab_stats(conn, account: str | None) -> None:
 
 # ── Tab: Accounts ─────────────────────────────────────────────────────────────
 
-def _tab_accounts(conn) -> None:
+def _tab_accounts(conn: sqlite3.Connection) -> None:
     st.header("Accounts")
     accounts = fetch_accounts(conn)
     if not accounts:
@@ -321,18 +321,18 @@ def _tab_accounts(conn) -> None:
 # ── Tab: Charts ──────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=60)
-def _cached_actuals(db_path: str, account: str | None) -> list[dict]:
+def _cached_actuals(db_path: str, account: str | None) -> list[MonthActual]:
     conn = get_connection(db_path)
     return monthly_actuals(conn, account=account)
 
 
 @st.cache_data(ttl=60)
-def _cached_with_predictions(db_path: str, account: str | None) -> list[dict]:
+def _cached_with_predictions(db_path: str, account: str | None) -> list[MonthPrediction]:
     conn = get_connection(db_path)
     return monthly_with_predictions(conn, account=account)
 
 
-def _tab_charts(conn, account: str | None) -> None:
+def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Charts")
     months = fetch_months(conn, account=account)
     if not months:
@@ -439,7 +439,7 @@ def _tab_charts(conn, account: str | None) -> None:
 
 # ── Tab: Groups ──────────────────────────────────────────────────────────────
 
-def _tab_groups(conn) -> None:
+def _tab_groups(conn: sqlite3.Connection) -> None:
     st.header("Groups")
     st.caption("Combine transactions into a named group for unified recurring detection and charting.")
 

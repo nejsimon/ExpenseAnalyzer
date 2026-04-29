@@ -1,4 +1,5 @@
 from datetime import date
+from typing import TypedDict, cast
 
 import click
 
@@ -12,6 +13,11 @@ from .output import render_accounts, render_adapters, render_groups, render_impo
 from .predictor import next_month, predict_month
 from .recurring import build_patterns
 from .stats import compute_stats
+
+
+class ContextObject(TypedDict):
+    db: str
+    account: str | None
 
 
 @click.group()
@@ -39,7 +45,8 @@ def import_cmd(ctx: click.Context, file: str, fmt: str, adapter_name: str | None
             known = ", ".join(a.name for a in ADAPTERS)
             click.echo(f"Unknown adapter '{adapter_name}'. Available: {known}", err=True)
             return
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     try:
         inserted, skipped, _ = import_file(file, conn, adapter=adapter)
@@ -71,9 +78,10 @@ def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool
     if month is None:
         today = date.today()
         month = f"{today.year}-{today.month:02d}"
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
-    account = ctx.obj["account"]
+    account = ctx_obj["account"]
     exp_patterns, exp_one_offs = build_patterns(conn, account=account, direction="expenses")
     inc_patterns, inc_one_offs = build_patterns(conn, account=account, direction="income")
     conn.close()
@@ -90,9 +98,10 @@ def predict(ctx: click.Context, month: str | None, fmt: str) -> None:
     """Predict expenses and income for a given month."""
     if month is None:
         month = next_month(date.today())
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
-    account = ctx.obj["account"]
+    account = ctx_obj["account"]
     exp_patterns, _ = build_patterns(conn, account=account, direction="expenses")
     inc_patterns, _ = build_patterns(conn, account=account, direction="income")
     conn.close()
@@ -106,9 +115,10 @@ def predict(ctx: click.Context, month: str | None, fmt: str) -> None:
 @click.pass_context
 def stats(ctx: click.Context, fmt: str) -> None:
     """Show yearly expense and income statistics."""
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
-    year_stats = compute_stats(conn, account=ctx.obj["account"])
+    year_stats = compute_stats(conn, account=ctx_obj["account"])
     conn.close()
     render_stats(year_stats, fmt)
 
@@ -118,7 +128,8 @@ def stats(ctx: click.Context, fmt: str) -> None:
 @click.pass_context
 def accounts(ctx: click.Context, fmt: str) -> None:
     """List all known accounts and their transaction counts."""
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     accts = fetch_accounts(conn)
     conn.close()
@@ -136,7 +147,8 @@ def groups_cmd() -> None:
 @click.pass_context
 def groups_list(ctx: click.Context, direction: str | None, fmt: str) -> None:
     """List all groups."""
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     grps = fetch_groups(conn, direction=direction)
     conn.close()
@@ -151,7 +163,8 @@ def groups_list(ctx: click.Context, direction: str | None, fmt: str) -> None:
 def groups_add(ctx: click.Context, name: str, direction: str, color: str) -> None:
     """Create a group."""
     import sqlite3 as _sqlite3
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     try:
         insert_group(conn, name, direction, color)
@@ -171,7 +184,8 @@ def groups_remove(ctx: click.Context, name: str, confirm: bool) -> None:
     if not confirm:
         click.echo("Pass --confirm to delete the group.")
         return
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     removed = delete_group(conn, name)
     conn.close()
@@ -189,7 +203,8 @@ def groups_remove(ctx: click.Context, name: str, confirm: bool) -> None:
 def groups_add_member(ctx: click.Context, name: str, reference: str, description: str) -> None:
     """Add a (reference, description) key to a group."""
     import sqlite3 as _sqlite3
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     try:
         add_group_member(conn, name, reference, description)
@@ -210,7 +225,8 @@ def groups_add_member(ctx: click.Context, name: str, reference: str, description
 @click.pass_context
 def groups_remove_member(ctx: click.Context, name: str, reference: str, description: str) -> None:
     """Remove a (reference, description) key from a group."""
-    conn = get_connection(ctx.obj["db"])
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
     init_db(conn)
     removed = remove_group_member(conn, name, reference, description)
     conn.close()
@@ -229,7 +245,8 @@ def reset(ctx: click.Context, confirm: bool) -> None:
         click.echo("Pass --confirm to reset the database.")
         return
     import os
-    db_path = ctx.obj["db"]
+    ctx_obj = cast(ContextObject, ctx.obj)
+    db_path = ctx_obj["db"]
     if os.path.exists(db_path):
         os.remove(db_path)
     conn = get_connection(db_path)

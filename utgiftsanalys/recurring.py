@@ -2,8 +2,13 @@ import sqlite3
 import statistics
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Literal
 
 from .db import fetch_group_members, fetch_groups, fetch_transactions
+
+AmountClassification = (
+    tuple[Literal["fixed"], float] | tuple[Literal["variable"], float, float]
+)
 
 _PERIOD_DAYS = {"monthly": 30, "quarterly": 91, "yearly": 365}
 
@@ -58,7 +63,7 @@ def _detect_cadence(analysis_months: list[str]) -> str | None:
     return None
 
 
-def _classify_amounts(amounts: list[float]) -> tuple:
+def _classify_amounts(amounts: list[float]) -> AmountClassification:
     """Returns ('fixed', amount) or ('variable', min, max)."""
     abs_amounts = [abs(a) for a in amounts]
     mean = statistics.mean(abs_amounts)
@@ -91,7 +96,7 @@ def build_patterns(
     )
 
     # Index all rows by (reference, description) for efficient group lookup
-    key_to_rows: dict[tuple[str, str], list] = {}
+    key_to_rows: dict[tuple[str, str], list[sqlite3.Row]] = {}
     for row in rows:
         key = (row["reference"] or "", row["description"] or "")
         key_to_rows.setdefault(key, []).append(row)
@@ -107,7 +112,7 @@ def build_patterns(
         excluded_keys |= member_keys
 
         month_amounts: dict[str, list[float]] = {}
-        all_group_txs: list = []
+        all_group_txs: list[sqlite3.Row] = []
         for mk in member_keys:
             for tx in key_to_rows.get(mk, []):
                 month_amounts.setdefault(tx["analysis_month"], []).append(tx["amount"])
@@ -160,7 +165,7 @@ def build_patterns(
         ))
 
     # ── Per-key phase: individual transaction keys not claimed by any group ───
-    key_groups: dict[tuple[str, str], list] = {}
+    key_groups: dict[tuple[str, str], list[sqlite3.Row]] = {}
     for row in rows:
         key = (row["reference"] or "", row["description"] or "")
         if key not in excluded_keys:

@@ -1,4 +1,5 @@
 import csv
+import sqlite3
 import sys
 
 from tabulate import tabulate
@@ -140,7 +141,7 @@ def render_stats(stats: list[YearStats], fmt: str = "table") -> None:
 
     headers = ["Year", "Actual", "Months", "Avg/month", "Predicted remaining", "Est. full year"]
 
-    def _rows(direction: str) -> list:
+    def _rows(direction: str) -> list[list[str]]:
         rows = []
         for s in stats:
             actual = s.actual_expense if direction == "expense" else s.actual_income
@@ -205,7 +206,7 @@ def render_import_result(inserted: int, skipped: int, fmt: str = "table") -> Non
         print(f"Inserted {inserted}, skipped {skipped}.")
 
 
-def render_groups(groups: list, fmt: str = "table") -> None:
+def render_groups(groups: list[sqlite3.Row], fmt: str = "table") -> None:
     """Render a list of group rows (sqlite3.Row from fetch_groups)."""
     headers = ["Name", "Direction", "Color"]
     rows = [[g["name"], g["direction"], g["color"]] for g in groups]

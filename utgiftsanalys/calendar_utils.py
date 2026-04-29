@@ -20,7 +20,7 @@ def _extra_bank_free_days(year: int) -> set[date]:
 
 def swedish_bank_days(year: int, month: int) -> list[date]:
     """Return sorted list of bank days (Mon–Fri, non-holiday) in the given month."""
-    se_holidays = holidays.Sweden(years=[year])
+    se_holidays = holidays.Sweden(years=[year])  # type: ignore[attr-defined]
     extra = _extra_bank_free_days(year)
     result = []
     d = date(year, month, 1)

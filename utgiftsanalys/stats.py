@@ -1,3 +1,4 @@
+import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
@@ -18,7 +19,7 @@ class YearStats:
     predicted_income_remaining: float | None    # None until spec 11
 
 
-def compute_stats(conn, account: str | None = None) -> list[YearStats]:
+def compute_stats(conn: sqlite3.Connection, account: str | None = None) -> list[YearStats]:
     all_months_in_db = set(fetch_months(conn, account=account))
     if not all_months_in_db:
         return []
@@ -27,7 +28,7 @@ def compute_stats(conn, account: str | None = None) -> list[YearStats]:
     current_year = date.today().year
 
     # Group transactions by year
-    by_year: dict[int, list] = {}
+    by_year: dict[int, list[sqlite3.Row]] = {}
     for tx in all_txs:
         year = int(tx["analysis_month"][:4])
         by_year.setdefault(year, []).append(tx)

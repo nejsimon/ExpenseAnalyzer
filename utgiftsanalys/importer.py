@@ -4,12 +4,13 @@ import sqlite3
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Any, cast
 
 import chardet
 
 from .adapters import ADAPTERS, AmbiguousAdapterError, CsvAdapter, detect_adapter
 from .calendar_utils import get_analysis_month
-from .db import insert_transaction
+from .db import TransactionDict, insert_transaction
 
 
 def detect_encoding(path: str) -> str:
@@ -46,8 +47,8 @@ def _parse_amount(value: str, decimal_sep: str = ".") -> float:
     return float(clean)
 
 
-def _normalize_row(raw: dict, adapter: CsvAdapter) -> dict:
-    tx: dict = {}
+def _normalize_row(raw: dict[str, str], adapter: CsvAdapter) -> TransactionDict:
+    tx: dict[str, Any] = {}
     for csv_col, internal in adapter.column_map.items():
         tx[internal] = raw.get(csv_col, "").strip()
 
@@ -60,7 +61,7 @@ def _normalize_row(raw: dict, adapter: CsvAdapter) -> dict:
     tx["import_hash"] = _compute_hash(
         tx["booking_date"], tx["reference"], tx["description"], str(tx["amount"]), tx["account"]
     )
-    return tx
+    return cast(TransactionDict, tx)
 
 
 def add_months(ym: str, n: int) -> str:
@@ -72,7 +73,7 @@ def add_months(ym: str, n: int) -> str:
     return f"{year}-{month:02d}"
 
 
-def detect_holes(batch: list[dict]) -> list[str]:
+def detect_holes(batch: list[TransactionDict]) -> list[str]:
     """Return warning strings for suspected missing months in the batch."""
     warnings: list[str] = []
 
@@ -99,7 +100,7 @@ def detect_holes(batch: list[dict]) -> list[str]:
         groups: dict[tuple[str, str], set[str]] = {}
         for tx in batch:
             if (tx["amount"] * sign) > 0:
-                key = (tx["reference"], tx["description"])
+                key = (tx["reference"] or "", tx["description"] or "")
                 groups.setdefault(key, set()).add(tx["analysis_month"])
 
         for (ref, desc), months in groups.items():
@@ -148,7 +149,7 @@ def import_file(
 
     lines = all_lines[_find_header_line(all_lines):]
 
-    batch: list[dict] = []
+    batch: list[TransactionDict] = []
     reader = csv.DictReader(lines, delimiter=adapter.delimiter if adapter else ",")
     if adapter is None:
         headers = list(reader.fieldnames or [])

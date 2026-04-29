@@ -1,5 +1,23 @@
 import sqlite3
 from pathlib import Path
+from typing import TypedDict
+
+
+class TransactionDict(TypedDict):
+    row_number:       int | None
+    clearing:         str | None
+    account:          str | None
+    product:          str | None
+    currency:         str | None
+    booking_date:     str
+    transaction_date: str | None
+    value_date:       str | None
+    reference:        str | None
+    description:      str | None
+    amount:           float
+    balance:          float | None
+    import_hash:      str
+    analysis_month:   str
 
 DEFAULT_DB_PATH = str(Path(__file__).parent.parent / "data" / "utgiftsanalys.db")
 
@@ -53,7 +71,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def insert_transaction(conn: sqlite3.Connection, tx: dict) -> bool:
+def insert_transaction(conn: sqlite3.Connection, tx: TransactionDict) -> bool:
     """Returns True if inserted, False if skipped (duplicate)."""
     cursor = conn.execute(
         """
@@ -80,8 +98,8 @@ def fetch_transactions(
     incoming_only: bool = False,
     account: str | None = None,
 ) -> list[sqlite3.Row]:
-    clauses = []
-    params: list = []
+    clauses: list[str] = []
+    params: list[str] = []
     if outgoing_only:
         clauses.append("amount < 0")
     elif incoming_only:
@@ -100,8 +118,8 @@ def fetch_transactions(
 
 
 def fetch_months(conn: sqlite3.Connection, account: str | None = None) -> list[str]:
-    clauses = []
-    params: list = []
+    clauses: list[str] = []
+    params: list[str] = []
     if account:
         clauses.append("account = ?")
         params.append(account)
