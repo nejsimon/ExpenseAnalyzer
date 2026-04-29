@@ -205,6 +205,21 @@ def render_import_result(inserted: int, skipped: int, fmt: str = "table") -> Non
         print(f"Inserted {inserted}, skipped {skipped}.")
 
 
+def render_groups(groups: list, fmt: str = "table") -> None:
+    """Render a list of group rows (sqlite3.Row from fetch_groups)."""
+    headers = ["Name", "Direction", "Color"]
+    rows = [[g["name"], g["direction"], g["color"]] for g in groups]
+    if fmt == "csv":
+        w = csv.writer(sys.stdout)
+        w.writerow(headers)
+        w.writerows(rows)
+    else:
+        if rows:
+            print(tabulate(rows, headers=headers, tablefmt="rounded_outline"))
+        else:
+            print("No groups found.")
+
+
 def render_adapters(adapters: list[CsvAdapter], fmt: str = "table") -> None:
     headers = ["Name", "Required columns", "Delimiter", "Decimal"]
     rows = [

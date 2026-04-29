@@ -3,9 +3,12 @@ from datetime import date
 import click
 
 from .adapters import ADAPTERS, AmbiguousAdapterError
-from .db import DEFAULT_DB_PATH, fetch_accounts, get_connection, init_db
+from .db import (
+    DEFAULT_DB_PATH, add_group_member, delete_group, fetch_accounts,
+    fetch_groups, get_connection, init_db, insert_group, remove_group_member,
+)
 from .importer import import_file
-from .output import render_accounts, render_adapters, render_import_result, render_prediction, render_recurring_summary, render_stats
+from .output import render_accounts, render_adapters, render_groups, render_import_result, render_prediction, render_recurring_summary, render_stats
 from .predictor import next_month, predict_month
 from .recurring import build_patterns
 from .stats import compute_stats
@@ -120,6 +123,101 @@ def accounts(ctx: click.Context, fmt: str) -> None:
     accts = fetch_accounts(conn)
     conn.close()
     render_accounts(accts, fmt)
+
+
+@main.group("groups")
+def groups_cmd() -> None:
+    """Manage transaction groups."""
+
+
+@groups_cmd.command("list")
+@click.option("--direction", default=None, type=click.Choice(["expenses", "income"]))
+@click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.pass_context
+def groups_list(ctx: click.Context, direction: str | None, fmt: str) -> None:
+    """List all groups."""
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    grps = fetch_groups(conn, direction=direction)
+    conn.close()
+    render_groups(grps, fmt)
+
+
+@groups_cmd.command("add")
+@click.argument("name")
+@click.option("--direction", required=True, type=click.Choice(["expenses", "income"]))
+@click.option("--color", default="#888888", show_default=True, help="Hex color for charts.")
+@click.pass_context
+def groups_add(ctx: click.Context, name: str, direction: str, color: str) -> None:
+    """Create a group."""
+    import sqlite3 as _sqlite3
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    try:
+        insert_group(conn, name, direction, color)
+        click.echo(f"Group '{name}' created.")
+    except _sqlite3.IntegrityError:
+        click.echo(f"Error: a group named '{name}' already exists.", err=True)
+    finally:
+        conn.close()
+
+
+@groups_cmd.command("remove")
+@click.argument("name")
+@click.option("--confirm", is_flag=True, help="Required to confirm deletion.")
+@click.pass_context
+def groups_remove(ctx: click.Context, name: str, confirm: bool) -> None:
+    """Delete a group (and its members)."""
+    if not confirm:
+        click.echo("Pass --confirm to delete the group.")
+        return
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    removed = delete_group(conn, name)
+    conn.close()
+    if removed:
+        click.echo(f"Group '{name}' removed.")
+    else:
+        click.echo(f"No group named '{name}'.", err=True)
+
+
+@groups_cmd.command("add-member")
+@click.argument("name")
+@click.option("--reference", required=True, help="Transaction reference.")
+@click.option("--description", required=True, help="Transaction description.")
+@click.pass_context
+def groups_add_member(ctx: click.Context, name: str, reference: str, description: str) -> None:
+    """Add a (reference, description) key to a group."""
+    import sqlite3 as _sqlite3
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    try:
+        add_group_member(conn, name, reference, description)
+        click.echo("Member added.")
+    except _sqlite3.IntegrityError:
+        click.echo(
+            f"Error: '{description}' is already assigned to a group, or group '{name}' not found.",
+            err=True,
+        )
+    finally:
+        conn.close()
+
+
+@groups_cmd.command("remove-member")
+@click.argument("name")
+@click.option("--reference", required=True, help="Transaction reference.")
+@click.option("--description", required=True, help="Transaction description.")
+@click.pass_context
+def groups_remove_member(ctx: click.Context, name: str, reference: str, description: str) -> None:
+    """Remove a (reference, description) key from a group."""
+    conn = get_connection(ctx.obj["db"])
+    init_db(conn)
+    removed = remove_group_member(conn, name, reference, description)
+    conn.close()
+    if removed:
+        click.echo("Member removed.")
+    else:
+        click.echo("Member not found in that group.", err=True)
 
 
 @main.command()

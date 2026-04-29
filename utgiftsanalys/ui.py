@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import tempfile
 from datetime import date
 
@@ -8,7 +9,12 @@ import streamlit as st
 
 from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
 from utgiftsanalys.chart_data import monthly_actuals, monthly_with_predictions
-from utgiftsanalys.db import DEFAULT_DB_PATH, fetch_accounts, fetch_months, get_connection, init_db
+from utgiftsanalys.db import (
+    DEFAULT_DB_PATH, add_group_member, delete_group,
+    fetch_accounts, fetch_group_members, fetch_groups,
+    fetch_months, fetch_transactions, get_connection, init_db,
+    insert_group, remove_group_member,
+)
 from utgiftsanalys.importer import import_file
 from utgiftsanalys.predictor import next_month, predict_month
 from utgiftsanalys.recurring import build_patterns
@@ -109,6 +115,57 @@ def _one_off_df(one_offs) -> pd.DataFrame:
     ])
 
 
+def _render_recurring_section(
+    conn,
+    patterns: list,
+    direction: str,
+    month: str,
+    account: str | None,
+) -> None:
+    """Render recurring patterns: groups as expanders, individuals as a flat table."""
+    group_pats = [p for p in patterns if p.color is not None]
+    indiv_pats = [p for p in patterns if p.color is None]
+
+    if group_pats:
+        grp_map = {g["name"]: g for g in fetch_groups(conn, direction=direction)}
+        outgoing = (direction == "expenses")
+        month_txs = fetch_transactions(
+            conn, month=month,
+            outgoing_only=outgoing, incoming_only=(not outgoing),
+            account=account,
+        )
+        for p in group_pats:
+            if p.amount_type == "fixed":
+                amt_str = f"{p.fixed_amount:.2f} (fixed)"
+            else:
+                amt_str = f"{p.min_amount:.2f}–{p.max_amount:.2f} (var)"
+            status_str = "canceled" if p.status == "canceled" else "active"
+            with st.expander(f"{p.description} — {p.cadence} — {amt_str} — {status_str}"):
+                grp = grp_map.get(p.description)
+                if grp:
+                    members = fetch_group_members(conn, grp["id"])
+                    member_keys = {(m["reference"], m["description"]) for m in members}
+                    member_txs = [
+                        t for t in month_txs
+                        if (t["reference"] or "", t["description"] or "") in member_keys
+                    ]
+                    if member_txs:
+                        df = pd.DataFrame([{
+                            "Merchant": t["description"],
+                            "Date": t["booking_date"],
+                            "Amount": f"{abs(t['amount']):.2f}",
+                        } for t in member_txs])
+                        st.dataframe(df, hide_index=True, width="stretch")
+                    else:
+                        st.caption("No transactions this month.")
+
+    df = _pattern_df(indiv_pats)
+    if not df.empty:
+        st.dataframe(df, width="stretch", hide_index=True)
+    elif not group_pats:
+        st.caption("(none)")
+
+
 def _tab_analyze(conn, account: str | None) -> None:
     st.header("Analyze")
     months = fetch_months(conn, account=account)
@@ -129,11 +186,7 @@ def _tab_analyze(conn, account: str | None) -> None:
 
     if not deposits_only:
         st.subheader("Expenses — recurring")
-        df = _pattern_df(exp_patterns)
-        if not df.empty:
-            st.dataframe(df, width="stretch", hide_index=True)
-        else:
-            st.caption("(none)")
+        _render_recurring_section(conn, exp_patterns, "expenses", month, account)
         st.subheader("Expenses — one-offs")
         df = _one_off_df(exp_one_offs)
         if not df.empty:
@@ -142,11 +195,7 @@ def _tab_analyze(conn, account: str | None) -> None:
             st.caption("(none)")
 
     st.subheader("Income — recurring")
-    df = _pattern_df(inc_patterns)
-    if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True)
-    else:
-        st.caption("(none)")
+    _render_recurring_section(conn, inc_patterns, "income", month, account)
     st.subheader("Income — one-offs")
     df = _one_off_df(inc_one_offs)
     if not df.empty:
@@ -388,6 +437,97 @@ def _tab_charts(conn, account: str | None) -> None:
     st.altair_chart(chart4, width="stretch")
 
 
+# ── Tab: Groups ──────────────────────────────────────────────────────────────
+
+def _tab_groups(conn) -> None:
+    st.header("Groups")
+    st.caption("Combine transactions into a named group for unified recurring detection and charting.")
+
+    with st.expander("➕ Create new group"):
+        with st.form("create_group_form"):
+            name = st.text_input("Name", placeholder="e.g. phone and internet")
+            direction = st.selectbox("Direction", ["expenses", "income"])
+            color = st.color_picker("Color", value="#3498db")
+            submitted = st.form_submit_button("Create")
+        if submitted:
+            if not name.strip():
+                st.error("Name is required.")
+            else:
+                try:
+                    insert_group(conn, name.strip(), direction, color)
+                    st.cache_data.clear()
+                    st.success(f"Group '{name.strip()}' created.")
+                    st.rerun()
+                except sqlite3.IntegrityError:
+                    st.error(f"A group named '{name.strip()}' already exists.")
+
+    all_groups = fetch_groups(conn)
+    if not all_groups:
+        st.info("No groups yet. Create one above.")
+        return
+
+    for grp in all_groups:
+        with st.expander(f"{grp['name']}  ·  {grp['direction']}  ·  {grp['color']}"):
+            col1, col2 = st.columns([5, 1])
+            col1.markdown(f"**{grp['name']}** — {grp['direction']}")
+            if col2.button("Delete", key=f"del_grp_{grp['id']}", type="secondary"):
+                delete_group(conn, grp["name"])
+                st.cache_data.clear()
+                st.rerun()
+
+            members = fetch_group_members(conn, grp["id"])
+            if members:
+                st.markdown("**Members:**")
+                for m in members:
+                    mc1, mc2 = st.columns([5, 1])
+                    label = (
+                        m["description"]
+                        if m["reference"] == m["description"]
+                        else f"{m['reference']} / {m['description']}"
+                    )
+                    mc1.text(label)
+                    if mc2.button("Remove", key=f"rem_{grp['id']}_{m['id']}"):
+                        remove_group_member(conn, grp["name"], m["reference"], m["description"])
+                        st.cache_data.clear()
+                        st.rerun()
+            else:
+                st.caption("No members yet.")
+
+            # Add members
+            outgoing = grp["direction"] == "expenses"
+            all_txs = fetch_transactions(
+                conn, outgoing_only=outgoing, incoming_only=(not outgoing)
+            )
+            existing_keys = {(m["reference"], m["description"]) for m in members}
+            known_pairs = sorted(
+                {(t["reference"] or "", t["description"] or "") for t in all_txs},
+                key=lambda k: k[1].lower(),
+            )
+            available = [(ref, desc) for ref, desc in known_pairs if (ref, desc) not in existing_keys]
+            if available:
+                labels = [
+                    desc if ref == desc else f"{ref} / {desc}"
+                    for ref, desc in available
+                ]
+                with st.form(key=f"add_members_form_{grp['id']}"):
+                    selected = st.multiselect("Add members", labels)
+                    if st.form_submit_button("Add selected"):
+                        label_to_pair = dict(zip(labels, available))
+                        added = 0
+                        for lbl in selected:
+                            ref, desc = label_to_pair[lbl]
+                            try:
+                                add_group_member(conn, grp["name"], ref, desc)
+                                added += 1
+                            except sqlite3.IntegrityError:
+                                st.warning(f"'{desc}' is already in another group.")
+                        if added:
+                            st.cache_data.clear()
+                            st.rerun()
+            else:
+                st.caption("All available transactions are already assigned to a group.")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -395,8 +535,8 @@ def main() -> None:
     conn = _get_conn()
     account = _sidebar(conn)
 
-    tab_import, tab_analyze, tab_predict, tab_stats, tab_accounts, tab_charts = st.tabs(
-        ["Import", "Analyze", "Predict", "Stats", "Accounts", "Charts"]
+    tab_import, tab_analyze, tab_predict, tab_stats, tab_accounts, tab_charts, tab_groups = st.tabs(
+        ["Import", "Analyze", "Predict", "Stats", "Accounts", "Charts", "Groups"]
     )
     with tab_import:
         _tab_import(conn)
@@ -410,6 +550,8 @@ def main() -> None:
         _tab_accounts(conn)
     with tab_charts:
         _tab_charts(conn, account)
+    with tab_groups:
+        _tab_groups(conn)
 
 
 main()

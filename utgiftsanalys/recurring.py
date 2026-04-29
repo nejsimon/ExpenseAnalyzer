@@ -3,7 +3,7 @@ import statistics
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .db import fetch_transactions
+from .db import fetch_group_members, fetch_groups, fetch_transactions
 
 _PERIOD_DAYS = {"monthly": 30, "quarterly": 91, "yearly": 365}
 
@@ -21,6 +21,7 @@ class RecurringPattern:
     end_date: date | None
     status: str
     amounts: list[float]
+    color: str | None = None
 
 
 @dataclass
@@ -89,16 +90,83 @@ def build_patterns(
         account=account,
     )
 
-    # Group by (reference, description)
-    groups: dict[tuple[str, str], list] = {}
+    # Index all rows by (reference, description) for efficient group lookup
+    key_to_rows: dict[tuple[str, str], list] = {}
     for row in rows:
         key = (row["reference"] or "", row["description"] or "")
-        groups.setdefault(key, []).append(row)
+        key_to_rows.setdefault(key, []).append(row)
 
     patterns: list[RecurringPattern] = []
     one_offs: list[OneOff] = []
+    excluded_keys: set[tuple[str, str]] = set()
 
-    for (ref, desc), txs in groups.items():
+    # ── Group phase: process named groups before individual keys ──────────────
+    for grp in fetch_groups(conn, direction=direction):
+        members = fetch_group_members(conn, grp["id"])
+        member_keys = {(m["reference"], m["description"]) for m in members}
+        excluded_keys |= member_keys
+
+        month_amounts: dict[str, list[float]] = {}
+        all_group_txs: list = []
+        for mk in member_keys:
+            for tx in key_to_rows.get(mk, []):
+                month_amounts.setdefault(tx["analysis_month"], []).append(tx["amount"])
+                all_group_txs.append(tx)
+
+        if not all_group_txs:
+            continue
+
+        synthetic_months = sorted(month_amounts)
+        synthetic_amounts = [sum(month_amounts[m]) for m in synthetic_months]
+
+        cadence = _detect_cadence(synthetic_months)
+        if cadence is None:
+            for tx in all_group_txs:
+                one_offs.append(OneOff(
+                    reference=grp["name"],
+                    description=grp["name"],
+                    booking_date=date.fromisoformat(tx["booking_date"]),
+                    amount=tx["amount"],
+                ))
+            continue
+
+        classification = _classify_amounts(synthetic_amounts)
+        if classification[0] == "fixed":
+            amount_type, fixed_amount = "fixed", classification[1]
+            min_amount = max_amount = None
+        else:
+            amount_type, fixed_amount = "variable", None
+            _, min_amount, max_amount = classification
+
+        all_dates = sorted(date.fromisoformat(t["booking_date"]) for t in all_group_txs)
+        last_seen = max(all_dates)
+        period = _PERIOD_DAYS[cadence]
+        status = "canceled" if (today - last_seen).days > 1.5 * period else "active"
+        end_date = last_seen if status == "canceled" else None
+
+        patterns.append(RecurringPattern(
+            reference=grp["name"],
+            description=grp["name"],
+            cadence=cadence,
+            amount_type=amount_type,
+            fixed_amount=fixed_amount,
+            min_amount=min_amount,
+            max_amount=max_amount,
+            start_date=min(all_dates),
+            end_date=end_date,
+            status=status,
+            amounts=synthetic_amounts,
+            color=grp["color"],
+        ))
+
+    # ── Per-key phase: individual transaction keys not claimed by any group ───
+    key_groups: dict[tuple[str, str], list] = {}
+    for row in rows:
+        key = (row["reference"] or "", row["description"] or "")
+        if key not in excluded_keys:
+            key_groups.setdefault(key, []).append(row)
+
+    for (ref, desc), txs in key_groups.items():
         txs_sorted = sorted(txs, key=lambda t: t["booking_date"])
         dates = [date.fromisoformat(t["booking_date"]) for t in txs_sorted]
         amounts = [t["amount"] for t in txs_sorted]
