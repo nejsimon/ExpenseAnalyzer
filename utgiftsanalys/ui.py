@@ -2,6 +2,7 @@ import os
 import sqlite3
 import tempfile
 from datetime import date
+from typing import Any, cast
 
 import altair as alt
 import pandas as pd
@@ -9,9 +10,11 @@ import streamlit as st
 
 from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
 from utgiftsanalys.chart_data import (
+    GroupAmount,
     MonthActual,
     MonthPrediction,
     monthly_actuals,
+    monthly_group_breakdown,
     monthly_with_predictions,
 )
 from utgiftsanalys.db import (
@@ -108,6 +111,11 @@ def _tab_import(conn: sqlite3.Connection) -> None:
 
 # ── Tab: Analyze ──────────────────────────────────────────────────────────────
 
+_COLOR_COL_CONFIG = cast(
+    Any,
+    {"Color": st.column_config.ColorColumn("Color", width="small")},  # type: ignore[attr-defined]
+)
+
 
 def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
     rows = []
@@ -119,6 +127,7 @@ def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
         status = f"canceled (last: {p.end_date})" if p.status == "canceled" else "active"
         rows.append(
             {
+                "Color": p.color if p.color is not None else "#ffffff",
                 "Merchant": p.description,
                 "Cadence": p.cadence,
                 "Amount": amount,
@@ -196,7 +205,7 @@ def _render_recurring_section(
 
     df = _pattern_df(indiv_pats)
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True, column_config=_COLOR_COL_CONFIG)
     elif not group_pats:
         st.caption("(none)")
 
@@ -259,6 +268,7 @@ def _prediction_df(lines: list[PredictionLine], show_actuals: bool = False) -> p
     rows = []
     for line in lines:
         row: dict[str, str] = {
+            "Color": line.color if line.color is not None else "#ffffff",
             "Merchant": line.description,
             "Cadence": line.cadence,
             "Predicted (SEK)": f"{line.predicted_amount:.2f}",
@@ -308,14 +318,14 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.subheader("Expense predictions")
     df = _prediction_df(exp_lines, show_actuals=show_actuals)
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True, column_config=_COLOR_COL_CONFIG)
     else:
         st.caption("(none)")
 
     st.subheader("Income predictions")
     df = _prediction_df(inc_lines, show_actuals=show_actuals)
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True, column_config=_COLOR_COL_CONFIG)
     else:
         st.caption("(none)")
 
@@ -399,6 +409,12 @@ def _cached_with_predictions(db_path: str, account: str | None) -> list[MonthPre
     return monthly_with_predictions(conn, account=account)
 
 
+@st.cache_data(ttl=60)
+def _cached_group_breakdown(db_path: str, direction: str, account: str | None) -> list[GroupAmount]:
+    conn = get_connection(db_path)
+    return monthly_group_breakdown(conn, direction=direction, account=account)
+
+
 def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Charts")
     months = fetch_months(conn, account=account)
@@ -429,30 +445,76 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     df_actuals = pd.DataFrame(actuals)
     df_pred = pd.DataFrame(pred_data)
 
-    # Chart 1 — Monthly expenses
+    # Chart 1 — Monthly expenses (stacked by group)
     st.subheader("Monthly expenses")
-    chart1 = (
-        alt.Chart(df_actuals)
-        .mark_bar()
-        .encode(
-            x=alt.X("month:N", title="Month", sort=None),
-            y=alt.Y("expenses:Q", title="SEK"),
-            tooltip=["month", alt.Tooltip("expenses:Q", format=".2f")],
+    breakdown_exp = _cached_group_breakdown(db_path, "expenses", account)
+    breakdown_exp = [r for r in breakdown_exp if month_from <= r["month"] <= month_to]
+    if breakdown_exp:
+        df_exp = pd.DataFrame(breakdown_exp)
+        groups_exp = df_exp[["group", "color"]].drop_duplicates().sort_values("group")
+        domain_exp: list[str] = groups_exp["group"].tolist()
+        range_exp: list[str] = groups_exp["color"].tolist()
+        chart1 = (
+            alt.Chart(df_exp)
+            .mark_bar()
+            .encode(
+                x=alt.X("month:N", title="Month", sort=None),
+                y=alt.Y("amount:Q", title="SEK"),
+                color=alt.Color(
+                    "group:N",
+                    scale=alt.Scale(domain=domain_exp, range=range_exp),
+                    title="Group",
+                ),
+                order=alt.Order("group:N"),
+                tooltip=["month", "group", alt.Tooltip("amount:Q", format=".2f")],
+            )
         )
-    )
+    else:
+        chart1 = (
+            alt.Chart(df_actuals)
+            .mark_bar()
+            .encode(
+                x=alt.X("month:N", title="Month", sort=None),
+                y=alt.Y("expenses:Q", title="SEK"),
+                tooltip=["month", alt.Tooltip("expenses:Q", format=".2f")],
+            )
+        )
     st.altair_chart(chart1, width="stretch")
 
-    # Chart 2 — Monthly income
+    # Chart 2 — Monthly income (stacked by group)
     st.subheader("Monthly income")
-    chart2 = (
-        alt.Chart(df_actuals)
-        .mark_bar(color="#2ecc71")
-        .encode(
-            x=alt.X("month:N", title="Month", sort=None),
-            y=alt.Y("income:Q", title="SEK"),
-            tooltip=["month", alt.Tooltip("income:Q", format=".2f")],
+    breakdown_inc = _cached_group_breakdown(db_path, "income", account)
+    breakdown_inc = [r for r in breakdown_inc if month_from <= r["month"] <= month_to]
+    if breakdown_inc:
+        df_inc = pd.DataFrame(breakdown_inc)
+        groups_inc = df_inc[["group", "color"]].drop_duplicates().sort_values("group")
+        domain_inc: list[str] = groups_inc["group"].tolist()
+        range_inc: list[str] = groups_inc["color"].tolist()
+        chart2 = (
+            alt.Chart(df_inc)
+            .mark_bar()
+            .encode(
+                x=alt.X("month:N", title="Month", sort=None),
+                y=alt.Y("amount:Q", title="SEK"),
+                color=alt.Color(
+                    "group:N",
+                    scale=alt.Scale(domain=domain_inc, range=range_inc),
+                    title="Group",
+                ),
+                order=alt.Order("group:N"),
+                tooltip=["month", "group", alt.Tooltip("amount:Q", format=".2f")],
+            )
         )
-    )
+    else:
+        chart2 = (
+            alt.Chart(df_actuals)
+            .mark_bar(color="#2ecc71")
+            .encode(
+                x=alt.X("month:N", title="Month", sort=None),
+                y=alt.Y("income:Q", title="SEK"),
+                tooltip=["month", alt.Tooltip("income:Q", format=".2f")],
+            )
+        )
     st.altair_chart(chart2, width="stretch")
 
     if df_pred.empty or df_pred["predicted_expenses"].sum() == 0:
