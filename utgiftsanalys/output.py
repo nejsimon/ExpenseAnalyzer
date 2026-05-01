@@ -76,19 +76,33 @@ def render_recurring_summary(
     _render_pattern_section(inc_patterns, inc_one_offs, "Income", fmt)
 
 
+def _actual_cell(ln: PredictionLine) -> str:
+    if ln.actual_amount is None:
+        return "—"
+    if ln.color is None or ln.members_seen == ln.member_count:
+        return f"{ln.actual_amount:.2f}"
+    return f"{ln.actual_amount:.2f} ({ln.members_seen}/{ln.member_count} members)"
+
+
 def render_prediction(
     exp_lines: list[PredictionLine],
     inc_lines: list[PredictionLine],
     target_month: str,
     fmt: str = "table",
+    show_actuals: bool = False,
 ) -> None:
     detail_headers = ["Merchant", "Cadence", "Predicted (SEK)", "Range"]
-    exp_rows = [
-        [ln.description, ln.cadence, f"{ln.predicted_amount:.2f}", ln.range_str] for ln in exp_lines
-    ]
-    inc_rows = [
-        [ln.description, ln.cadence, f"{ln.predicted_amount:.2f}", ln.range_str] for ln in inc_lines
-    ]
+    if show_actuals:
+        detail_headers.append("Actual (so far)")
+
+    def _row(ln: PredictionLine) -> list[str]:
+        row = [ln.description, ln.cadence, f"{ln.predicted_amount:.2f}", ln.range_str]
+        if show_actuals:
+            row.append(_actual_cell(ln))
+        return row
+
+    exp_rows = [_row(ln) for ln in exp_lines]
+    inc_rows = [_row(ln) for ln in inc_lines]
     exp_total = sum(ln.predicted_amount for ln in exp_lines)
     inc_total = sum(ln.predicted_amount for ln in inc_lines)
     net = inc_total - exp_total

@@ -25,7 +25,7 @@ from .output import (
     render_recurring_summary,
     render_stats,
 )
-from .predictor import next_month, predict_month
+from .predictor import enrich_with_actuals, predict_month
 from .recurring import build_patterns
 from .stats import compute_stats
 
@@ -112,23 +112,29 @@ def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool
 
 
 @main.command()
-@click.option("--month", default=None, help="Target month YYYY-MM (default: next month).")
+@click.option("--month", default=None, help="Target month YYYY-MM (default: current month).")
 @click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
 @click.pass_context
 def predict(ctx: click.Context, month: str | None, fmt: str) -> None:
     """Predict expenses and income for a given month."""
+    today = date.today()
+    current_month = f"{today.year}-{today.month:02d}"
     if month is None:
-        month = next_month(date.today())
+        month = current_month
     ctx_obj = cast(ContextObject, ctx.obj)
     conn = get_connection(ctx_obj["db"])
     init_db(conn)
     account = ctx_obj["account"]
     exp_patterns, _ = build_patterns(conn, account=account, direction="expenses")
     inc_patterns, _ = build_patterns(conn, account=account, direction="income")
-    conn.close()
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
-    render_prediction(exp_lines, inc_lines, month, fmt)
+    show_actuals = month == current_month
+    if show_actuals:
+        enrich_with_actuals(conn, exp_lines, month, "expenses", account)
+        enrich_with_actuals(conn, inc_lines, month, "income", account)
+    conn.close()
+    render_prediction(exp_lines, inc_lines, month, fmt, show_actuals=show_actuals)
 
 
 @main.command()

@@ -1,6 +1,8 @@
+import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
+from .db import fetch_group_members, fetch_transactions
 from .recurring import RecurringPattern
 
 
@@ -11,6 +13,11 @@ class PredictionLine:
     predicted_amount: float
     amount_type: str
     range_str: str
+    reference: str = ""
+    color: str | None = None
+    actual_amount: float | None = None
+    member_count: int | None = None
+    members_seen: int | None = None
 
 
 def _hits_month(pattern: RecurringPattern, target_year: int, target_month: int) -> bool:
@@ -62,6 +69,8 @@ def predict_month(
                 predicted_amount=predicted,
                 amount_type=p.amount_type,
                 range_str=range_str,
+                reference=p.reference,
+                color=p.color,
             )
         )
 
@@ -73,3 +82,48 @@ def next_month(d: date) -> str:
     if d.month == 12:
         return f"{d.year + 1}-01"
     return f"{d.year}-{d.month + 1:02d}"
+
+
+def enrich_with_actuals(
+    conn: sqlite3.Connection,
+    lines: list[PredictionLine],
+    month: str,
+    direction: str = "expenses",
+    account: str | None = None,
+) -> None:
+    txs = fetch_transactions(
+        conn,
+        month=month,
+        outgoing_only=(direction == "expenses"),
+        incoming_only=(direction == "income"),
+        account=account,
+    )
+    tx_index: dict[tuple[str, str], list[sqlite3.Row]] = {}
+    for tx in txs:
+        key = (tx["reference"] or "", tx["description"] or "")
+        tx_index.setdefault(key, []).append(tx)
+
+    for line in lines:
+        if line.color is None:
+            matching = tx_index.get((line.reference, line.description), [])
+            if matching:
+                line.actual_amount = sum(abs(tx["amount"]) for tx in matching)
+        else:
+            grp_row = conn.execute(
+                "SELECT id FROM groups WHERE name = ?", (line.description,)
+            ).fetchone()
+            if grp_row is None:
+                continue
+            members = fetch_group_members(conn, grp_row["id"])
+            seen = 0
+            total = 0.0
+            for m in members:
+                key = (m["reference"], m["description"])
+                member_txs = tx_index.get(key, [])
+                if member_txs:
+                    seen += 1
+                    total += sum(abs(tx["amount"]) for tx in member_txs)
+            line.member_count = len(members)
+            line.members_seen = seen
+            if seen > 0:
+                line.actual_amount = total

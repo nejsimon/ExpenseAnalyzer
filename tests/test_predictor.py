@@ -3,8 +3,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from utgiftsanalys.db import init_db, insert_transaction
-from utgiftsanalys.predictor import _hits_month, _weighted_average, predict_month
+from utgiftsanalys.db import add_group_member, init_db, insert_group, insert_transaction
+from utgiftsanalys.predictor import PredictionLine, _hits_month, _weighted_average, enrich_with_actuals, predict_month
 from utgiftsanalys.recurring import RecurringPattern, build_patterns
 
 
@@ -141,3 +141,61 @@ def test_predict_range_str_set_for_variable():
     lines = predict_month([p], "2026-05")
     assert "400" in lines[0].range_str
     assert "820" in lines[0].range_str
+
+
+# --- enrich_with_actuals ---
+
+def _make_line(description: str, reference: str = "", color: str | None = None) -> PredictionLine:
+    return PredictionLine(
+        description=description,
+        cadence="monthly",
+        predicted_amount=100.0,
+        amount_type="fixed",
+        range_str="",
+        reference=reference,
+        color=color,
+    )
+
+
+def test_enrich_individual_pattern_sets_actual_amount():
+    conn = _make_conn()
+    _add_tx(conn, "Spotify", "Spotify", -119.0, date(2026, 4, 5))
+    line = _make_line("Spotify", reference="Spotify")
+    enrich_with_actuals(conn, [line], "2026-04", "expenses")
+    assert line.actual_amount == pytest.approx(119.0)
+    assert line.member_count is None
+    assert line.members_seen is None
+
+
+def test_enrich_individual_pattern_no_match_leaves_none():
+    conn = _make_conn()
+    line = _make_line("Spotify", reference="Spotify")
+    enrich_with_actuals(conn, [line], "2026-04", "expenses")
+    assert line.actual_amount is None
+
+
+def test_enrich_group_pattern_full_payment():
+    conn = _make_conn()
+    insert_group(conn, "Phone bundle", "expenses", "#ff0000")
+    add_group_member(conn, "Phone bundle", "TeliaRef", "Telia")
+    add_group_member(conn, "Phone bundle", "ComviqRef", "Comviq")
+    _add_tx(conn, "Telia", "TeliaRef", -199.0, date(2026, 4, 10))
+    _add_tx(conn, "Comviq", "ComviqRef", -99.0, date(2026, 4, 12))
+    line = _make_line("Phone bundle", color="#ff0000")
+    enrich_with_actuals(conn, [line], "2026-04", "expenses")
+    assert line.actual_amount == pytest.approx(298.0)
+    assert line.member_count == 2
+    assert line.members_seen == 2
+
+
+def test_enrich_group_pattern_partial_payment():
+    conn = _make_conn()
+    insert_group(conn, "Phone bundle", "expenses", "#ff0000")
+    add_group_member(conn, "Phone bundle", "TeliaRef", "Telia")
+    add_group_member(conn, "Phone bundle", "ComviqRef", "Comviq")
+    _add_tx(conn, "Telia", "TeliaRef", -199.0, date(2026, 4, 10))
+    line = _make_line("Phone bundle", color="#ff0000")
+    enrich_with_actuals(conn, [line], "2026-04", "expenses")
+    assert line.actual_amount == pytest.approx(199.0)
+    assert line.member_count == 2
+    assert line.members_seen == 1

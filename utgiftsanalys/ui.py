@@ -29,7 +29,7 @@ from utgiftsanalys.db import (
     remove_group_member,
 )
 from utgiftsanalys.importer import import_file
-from utgiftsanalys.predictor import PredictionLine, next_month, predict_month
+from utgiftsanalys.predictor import PredictionLine, enrich_with_actuals, next_month, predict_month
 from utgiftsanalys.recurring import OneOff, RecurringPattern, build_patterns
 from utgiftsanalys.stats import YearStats, compute_stats
 
@@ -241,27 +241,35 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
 # ── Tab: Predict ──────────────────────────────────────────────────────────────
 
 
-def _prediction_df(lines: list[PredictionLine]) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                "Merchant": line.description,
-                "Cadence": line.cadence,
-                "Predicted (SEK)": f"{line.predicted_amount:.2f}",
-                "Range": line.range_str or "—",
-            }
-            for line in lines
-        ]
-    )
+def _actual_str(line: PredictionLine) -> str:
+    if line.actual_amount is None:
+        return "—"
+    if line.color is None or line.members_seen == line.member_count:
+        return f"{line.actual_amount:.2f}"
+    return f"{line.actual_amount:.2f} ({line.members_seen}/{line.member_count} members)"
+
+
+def _prediction_df(lines: list[PredictionLine], show_actuals: bool = False) -> pd.DataFrame:
+    rows = []
+    for line in lines:
+        row: dict[str, str] = {
+            "Merchant": line.description,
+            "Cadence": line.cadence,
+            "Predicted (SEK)": f"{line.predicted_amount:.2f}",
+            "Range": line.range_str or "—",
+        }
+        if show_actuals:
+            row["Actual (so far)"] = _actual_str(line)
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Predict")
     today = date.today()
-    default_month = next_month(today)
-    # Offer the next 12 months
-    future_months = []
-    m = default_month
+    current_month = f"{today.year}-{today.month:02d}"
+    future_months: list[str] = [current_month]
+    m = next_month(today)
     for _ in range(12):
         future_months.append(m)
         y, mo = int(m[:4]), int(m[5:7])
@@ -276,6 +284,12 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     inc_patterns, _ = build_patterns(conn, account=account, direction="income")
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
+
+    show_actuals = month == current_month
+    if show_actuals:
+        enrich_with_actuals(conn, exp_lines, month, "expenses", account)
+        enrich_with_actuals(conn, inc_lines, month, "income", account)
+
     exp_total = sum(line.predicted_amount for line in exp_lines)
     inc_total = sum(line.predicted_amount for line in inc_lines)
 
@@ -285,14 +299,14 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     col3.metric("Net", f"{inc_total - exp_total:,.2f} SEK")
 
     st.subheader("Expense predictions")
-    df = _prediction_df(exp_lines)
+    df = _prediction_df(exp_lines, show_actuals=show_actuals)
     if not df.empty:
         st.dataframe(df, width="stretch", hide_index=True)
     else:
         st.caption("(none)")
 
     st.subheader("Income predictions")
-    df = _prediction_df(inc_lines)
+    df = _prediction_df(inc_lines, show_actuals=show_actuals)
     if not df.empty:
         st.dataframe(df, width="stretch", hide_index=True)
     else:
