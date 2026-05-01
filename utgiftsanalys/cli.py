@@ -14,6 +14,7 @@ from .db import (
     init_db,
     insert_group,
     remove_group_member,
+    set_group_exclude,
 )
 from .importer import import_file
 from .output import (
@@ -275,6 +276,24 @@ def groups_remove_member(ctx: click.Context, name: str, reference: str, descript
         click.echo("Member removed.")
     else:
         click.echo("Member not found in that group.", err=True)
+
+
+@groups_cmd.command("set-predict-exclude")
+@click.argument("name")
+@click.option("--exclude/--no-exclude", default=True, help="Exclude this group from predictions.")
+@click.pass_context
+def groups_set_predict_exclude(ctx: click.Context, name: str, exclude: bool) -> None:
+    """Exclude or include a group in predictions."""
+    ctx_obj = cast(ContextObject, ctx.obj)
+    conn = get_connection(ctx_obj["db"])
+    init_db(conn)
+    found = set_group_exclude(conn, name, exclude)
+    conn.close()
+    if found:
+        status = "excluded from" if exclude else "included in"
+        click.echo(f"Group '{name}' is now {status} predictions.")
+    else:
+        click.echo(f"No group named '{name}'.", err=True)
 
 
 @main.command()

@@ -25,6 +25,7 @@ class RecurringPattern:
     status: str
     amounts: list[float]
     color: str | None = None
+    exclude_from_prediction: bool = False
 
 
 @dataclass
@@ -166,6 +167,7 @@ def build_patterns(
                     status=status,
                     amounts=synthetic_amounts,
                     color=grp["color"],
+                    exclude_from_prediction=bool(grp["exclude_from_prediction"]),
                 )
             )
 

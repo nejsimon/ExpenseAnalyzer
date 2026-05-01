@@ -188,6 +188,13 @@ def test_enrich_group_pattern_full_payment():
     assert line.members_seen == 2
 
 
+def test_predict_excludes_excluded_from_prediction_pattern():
+    p = _make_pattern("monthly", "fixed", [-100.0], date(2025, 1, 1))
+    p.exclude_from_prediction = True
+    lines = predict_month([p], "2026-05")
+    assert lines == []
+
+
 def test_enrich_group_pattern_partial_payment():
     conn = _make_conn()
     insert_group(conn, "Phone bundle", "expenses", "#ff0000")

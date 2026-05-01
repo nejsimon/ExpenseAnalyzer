@@ -52,6 +52,8 @@ def predict_month(
     for p in patterns:
         if p.status != "active":
             continue
+        if p.exclude_from_prediction:
+            continue
         if not _hits_month(p, year, month):
             continue
 

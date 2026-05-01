@@ -27,6 +27,7 @@ from utgiftsanalys.db import (
     init_db,
     insert_group,
     remove_group_member,
+    set_group_exclude,
 )
 from utgiftsanalys.importer import import_file
 from utgiftsanalys.predictor import PredictionLine, enrich_with_actuals, next_month, predict_month
@@ -544,6 +545,16 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
             if col2.button("Delete", key=f"del_grp_{grp['id']}", type="secondary"):
                 delete_group(conn, grp["name"])
                 st.cache_data.clear()
+                st.rerun()
+
+            excluded = bool(grp["exclude_from_prediction"])
+            new_excluded = st.toggle(
+                "Exclude from predictions",
+                value=excluded,
+                key=f"excl_{grp['id']}",
+            )
+            if new_excluded != excluded:
+                set_group_exclude(conn, grp["name"], new_excluded)
                 st.rerun()
 
             members = fetch_group_members(conn, grp["id"])

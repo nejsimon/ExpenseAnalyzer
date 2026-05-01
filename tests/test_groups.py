@@ -5,8 +5,14 @@ from datetime import date
 import pytest
 
 from utgiftsanalys.db import (
-    add_group_member, delete_group, fetch_group_members, fetch_groups,
-    init_db, insert_group, remove_group_member,
+    add_group_member,
+    delete_group,
+    fetch_group_members,
+    fetch_groups,
+    init_db,
+    insert_group,
+    remove_group_member,
+    set_group_exclude,
 )
 from utgiftsanalys.recurring import build_patterns
 
@@ -176,3 +182,34 @@ def test_group_single_member_alias():
     assert len(patterns) == 1
     assert patterns[0].description == "El"
     assert patterns[0].color == "#ff0000"
+
+
+# ── exclude_from_prediction ────────────────────────────────────────────────────
+
+def test_set_group_exclude_roundtrip():
+    conn = _make_conn()
+    insert_group(conn, "phone", "expenses")
+    assert fetch_groups(conn)[0]["exclude_from_prediction"] == 0
+
+    assert set_group_exclude(conn, "phone", True) is True
+    assert fetch_groups(conn)[0]["exclude_from_prediction"] == 1
+
+    assert set_group_exclude(conn, "phone", False) is True
+    assert fetch_groups(conn)[0]["exclude_from_prediction"] == 0
+
+
+def test_set_group_exclude_missing_group_returns_false():
+    conn = _make_conn()
+    assert set_group_exclude(conn, "nonexistent", True) is False
+
+
+def test_build_patterns_propagates_exclude_flag():
+    conn = _make_conn()
+    _setup_monthly_txs(conn, "Telia", "Telia", -199.0, ["2025-01","2025-02","2025-03","2025-04"])
+    insert_group(conn, "phone", "expenses")
+    add_group_member(conn, "phone", "Telia", "Telia")
+    set_group_exclude(conn, "phone", True)
+
+    patterns, _ = build_patterns(conn, reference_date=date(2025, 5, 1))
+    assert len(patterns) == 1
+    assert patterns[0].exclude_from_prediction is True

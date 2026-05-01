@@ -42,10 +42,11 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE TABLE IF NOT EXISTS groups (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    name      TEXT NOT NULL UNIQUE,
-    direction TEXT NOT NULL CHECK (direction IN ('expenses', 'income')),
-    color     TEXT NOT NULL DEFAULT '#888888'
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                    TEXT NOT NULL UNIQUE,
+    direction               TEXT NOT NULL CHECK (direction IN ('expenses', 'income')),
+    color                   TEXT NOT NULL DEFAULT '#888888',
+    exclude_from_prediction INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS group_members (
@@ -70,6 +71,13 @@ def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_DDL)
     conn.commit()
+    try:
+        conn.execute(
+            "ALTER TABLE groups ADD COLUMN exclude_from_prediction INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 
 def insert_transaction(conn: sqlite3.Connection, tx: TransactionDict) -> bool:
@@ -170,6 +178,16 @@ def insert_group(
 def delete_group(conn: sqlite3.Connection, name: str) -> bool:
     """Delete group by name (cascades to group_members). Returns True if deleted."""
     cursor = conn.execute("DELETE FROM groups WHERE name = ?", (name,))
+    conn.commit()
+    return cursor.rowcount == 1
+
+
+def set_group_exclude(conn: sqlite3.Connection, name: str, exclude: bool) -> bool:
+    """Set exclude_from_prediction for a group. Returns True if the group was found."""
+    cursor = conn.execute(
+        "UPDATE groups SET exclude_from_prediction = ? WHERE name = ?",
+        (1 if exclude else 0, name),
+    )
     conn.commit()
     return cursor.rowcount == 1
 
