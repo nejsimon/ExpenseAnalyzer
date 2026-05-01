@@ -85,6 +85,7 @@ def build_patterns(
     reference_date: date | None = None,
     account: str | None = None,
     direction: str = "expenses",
+    grouped: bool = True,
 ) -> tuple[list[RecurringPattern], list[OneOff]]:
     today = reference_date or date.today()
     rows = fetch_transactions(
@@ -105,67 +106,68 @@ def build_patterns(
     excluded_keys: set[tuple[str, str]] = set()
 
     # ── Group phase: process named groups before individual keys ──────────────
-    for grp in fetch_groups(conn, direction=direction):
-        members = fetch_group_members(conn, grp["id"])
-        member_keys = {(m["reference"], m["description"]) for m in members}
-        excluded_keys |= member_keys
+    if grouped:
+        for grp in fetch_groups(conn, direction=direction):
+            members = fetch_group_members(conn, grp["id"])
+            member_keys = {(m["reference"], m["description"]) for m in members}
+            excluded_keys |= member_keys
 
-        month_amounts: dict[str, list[float]] = {}
-        all_group_txs: list[sqlite3.Row] = []
-        for mk in member_keys:
-            for tx in key_to_rows.get(mk, []):
-                month_amounts.setdefault(tx["analysis_month"], []).append(tx["amount"])
-                all_group_txs.append(tx)
+            month_amounts: dict[str, list[float]] = {}
+            all_group_txs: list[sqlite3.Row] = []
+            for mk in member_keys:
+                for tx in key_to_rows.get(mk, []):
+                    month_amounts.setdefault(tx["analysis_month"], []).append(tx["amount"])
+                    all_group_txs.append(tx)
 
-        if not all_group_txs:
-            continue
+            if not all_group_txs:
+                continue
 
-        synthetic_months = sorted(month_amounts)
-        synthetic_amounts = [sum(month_amounts[m]) for m in synthetic_months]
+            synthetic_months = sorted(month_amounts)
+            synthetic_amounts = [sum(month_amounts[m]) for m in synthetic_months]
 
-        cadence = _detect_cadence(synthetic_months)
-        if cadence is None:
-            for tx in all_group_txs:
-                one_offs.append(
-                    OneOff(
-                        reference=grp["name"],
-                        description=grp["name"],
-                        booking_date=date.fromisoformat(tx["booking_date"]),
-                        amount=tx["amount"],
+            cadence = _detect_cadence(synthetic_months)
+            if cadence is None:
+                for tx in all_group_txs:
+                    one_offs.append(
+                        OneOff(
+                            reference=grp["name"],
+                            description=grp["name"],
+                            booking_date=date.fromisoformat(tx["booking_date"]),
+                            amount=tx["amount"],
+                        )
                     )
+                continue
+
+            classification = _classify_amounts(synthetic_amounts)
+            if classification[0] == "fixed":
+                amount_type, fixed_amount = "fixed", classification[1]
+                min_amount = max_amount = None
+            else:
+                amount_type, fixed_amount = "variable", None
+                _, min_amount, max_amount = classification
+
+            all_dates = sorted(date.fromisoformat(t["booking_date"]) for t in all_group_txs)
+            last_seen = max(all_dates)
+            period = _PERIOD_DAYS[cadence]
+            status = "canceled" if (today - last_seen).days > 1.5 * period else "active"
+            end_date = last_seen if status == "canceled" else None
+
+            patterns.append(
+                RecurringPattern(
+                    reference=grp["name"],
+                    description=grp["name"],
+                    cadence=cadence,
+                    amount_type=amount_type,
+                    fixed_amount=fixed_amount,
+                    min_amount=min_amount,
+                    max_amount=max_amount,
+                    start_date=min(all_dates),
+                    end_date=end_date,
+                    status=status,
+                    amounts=synthetic_amounts,
+                    color=grp["color"],
                 )
-            continue
-
-        classification = _classify_amounts(synthetic_amounts)
-        if classification[0] == "fixed":
-            amount_type, fixed_amount = "fixed", classification[1]
-            min_amount = max_amount = None
-        else:
-            amount_type, fixed_amount = "variable", None
-            _, min_amount, max_amount = classification
-
-        all_dates = sorted(date.fromisoformat(t["booking_date"]) for t in all_group_txs)
-        last_seen = max(all_dates)
-        period = _PERIOD_DAYS[cadence]
-        status = "canceled" if (today - last_seen).days > 1.5 * period else "active"
-        end_date = last_seen if status == "canceled" else None
-
-        patterns.append(
-            RecurringPattern(
-                reference=grp["name"],
-                description=grp["name"],
-                cadence=cadence,
-                amount_type=amount_type,
-                fixed_amount=fixed_amount,
-                min_amount=min_amount,
-                max_amount=max_amount,
-                start_date=min(all_dates),
-                end_date=end_date,
-                status=status,
-                amounts=synthetic_amounts,
-                color=grp["color"],
             )
-        )
 
     # ── Per-key phase: individual transaction keys not claimed by any group ───
     key_groups: dict[tuple[str, str], list[sqlite3.Row]] = {}

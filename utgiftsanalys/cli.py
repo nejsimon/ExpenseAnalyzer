@@ -91,8 +91,13 @@ def adapters_cmd(fmt: str) -> None:
 @click.option(
     "--deposits-only", is_flag=True, default=False, help="Show only the income/deposits section."
 )
+@click.option(
+    "--flat", is_flag=True, default=False, help="Show individual merchants instead of groups."
+)
 @click.pass_context
-def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool) -> None:
+def analyze(
+    ctx: click.Context, month: str | None, fmt: str, deposits_only: bool, flat: bool
+) -> None:
     """Show recurring patterns and one-offs."""
     if month is None:
         today = date.today()
@@ -101,8 +106,12 @@ def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool
     conn = get_connection(ctx_obj["db"])
     init_db(conn)
     account = ctx_obj["account"]
-    exp_patterns, exp_one_offs = build_patterns(conn, account=account, direction="expenses")
-    inc_patterns, inc_one_offs = build_patterns(conn, account=account, direction="income")
+    exp_patterns, exp_one_offs = build_patterns(
+        conn, account=account, direction="expenses", grouped=not flat
+    )
+    inc_patterns, inc_one_offs = build_patterns(
+        conn, account=account, direction="income", grouped=not flat
+    )
     conn.close()
     exp_one_offs = [o for o in exp_one_offs if str(o.booking_date)[:7] == month]
     inc_one_offs = [o for o in inc_one_offs if str(o.booking_date)[:7] == month]
@@ -114,8 +123,11 @@ def analyze(ctx: click.Context, month: str | None, fmt: str, deposits_only: bool
 @main.command()
 @click.option("--month", default=None, help="Target month YYYY-MM (default: current month).")
 @click.option("--output", "fmt", default="table", type=click.Choice(["table", "csv"]))
+@click.option(
+    "--flat", is_flag=True, default=False, help="Show individual merchants instead of groups."
+)
 @click.pass_context
-def predict(ctx: click.Context, month: str | None, fmt: str) -> None:
+def predict(ctx: click.Context, month: str | None, fmt: str, flat: bool) -> None:
     """Predict expenses and income for a given month."""
     today = date.today()
     current_month = f"{today.year}-{today.month:02d}"
@@ -125,8 +137,8 @@ def predict(ctx: click.Context, month: str | None, fmt: str) -> None:
     conn = get_connection(ctx_obj["db"])
     init_db(conn)
     account = ctx_obj["account"]
-    exp_patterns, _ = build_patterns(conn, account=account, direction="expenses")
-    inc_patterns, _ = build_patterns(conn, account=account, direction="income")
+    exp_patterns, _ = build_patterns(conn, account=account, direction="expenses", grouped=not flat)
+    inc_patterns, _ = build_patterns(conn, account=account, direction="income", grouped=not flat)
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
     show_actuals = month == current_month

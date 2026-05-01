@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from utgiftsanalys.db import init_db, insert_transaction
+from utgiftsanalys.db import add_group_member, init_db, insert_group, insert_transaction
 from utgiftsanalys.recurring import build_patterns
 
 
@@ -173,3 +173,37 @@ def test_deposits_excluded():
     patterns, one_offs = build_patterns(conn, reference_date=date(2025, 7, 1))
     assert len(patterns) == 0
     assert len(one_offs) == 0
+
+
+def test_grouped_false_returns_individual_members():
+    """With grouped=False, group member merchants appear as individual patterns."""
+    conn = _make_conn()
+    insert_group(conn, "Phone bundle", "expenses", "#ff0000")
+    add_group_member(conn, "Phone bundle", "TeliaRef", "Telia")
+    add_group_member(conn, "Phone bundle", "ComviqRef", "Comviq")
+    base = date(2025, 1, 15)
+    for i in range(4):
+        _add_tx(conn, "Telia", "TeliaRef", -199.0, base + timedelta(days=30 * i))
+        _add_tx(conn, "Comviq", "ComviqRef", -99.0, base + timedelta(days=30 * i))
+    patterns, _ = build_patterns(conn, reference_date=date(2025, 6, 1), grouped=False)
+    descs = {p.description for p in patterns}
+    assert "Telia" in descs
+    assert "Comviq" in descs
+    assert "Phone bundle" not in descs
+
+
+def test_grouped_true_returns_group_pattern():
+    """With grouped=True (default), group members are aggregated into a single pattern."""
+    conn = _make_conn()
+    insert_group(conn, "Phone bundle", "expenses", "#ff0000")
+    add_group_member(conn, "Phone bundle", "TeliaRef", "Telia")
+    add_group_member(conn, "Phone bundle", "ComviqRef", "Comviq")
+    base = date(2025, 1, 15)
+    for i in range(4):
+        _add_tx(conn, "Telia", "TeliaRef", -199.0, base + timedelta(days=30 * i))
+        _add_tx(conn, "Comviq", "ComviqRef", -99.0, base + timedelta(days=30 * i))
+    patterns, _ = build_patterns(conn, reference_date=date(2025, 6, 1), grouped=True)
+    descs = {p.description for p in patterns}
+    assert "Phone bundle" in descs
+    assert "Telia" not in descs
+    assert "Comviq" not in descs

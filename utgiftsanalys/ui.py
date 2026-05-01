@@ -212,9 +212,14 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
     default_idx = months.index(current) if current in months else len(months) - 1
     month = st.selectbox("Month", months, index=default_idx)
     deposits_only = st.checkbox("Deposits only")
+    grouped = st.checkbox("Group transactions", value=True, key="analyze_grouped")
 
-    exp_patterns, exp_one_offs = build_patterns(conn, account=account, direction="expenses")
-    inc_patterns, inc_one_offs = build_patterns(conn, account=account, direction="income")
+    exp_patterns, exp_one_offs = build_patterns(
+        conn, account=account, direction="expenses", grouped=grouped
+    )
+    inc_patterns, inc_one_offs = build_patterns(
+        conn, account=account, direction="income", grouped=grouped
+    )
     exp_one_offs = [o for o in exp_one_offs if str(o.booking_date)[:7] == month]
     inc_one_offs = [o for o in inc_one_offs if str(o.booking_date)[:7] == month]
 
@@ -279,9 +284,10 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
             mo = 1
         m = f"{y}-{mo:02d}"
     month = st.selectbox("Month", future_months)
+    grouped = st.checkbox("Group transactions", value=True, key="predict_grouped")
 
-    exp_patterns, _ = build_patterns(conn, account=account, direction="expenses")
-    inc_patterns, _ = build_patterns(conn, account=account, direction="income")
+    exp_patterns, _ = build_patterns(conn, account=account, direction="expenses", grouped=grouped)
+    inc_patterns, _ = build_patterns(conn, account=account, direction="income", grouped=grouped)
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
 
