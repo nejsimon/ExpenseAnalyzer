@@ -2,7 +2,7 @@ import os
 import sqlite3
 import tempfile
 from datetime import date
-from typing import Any, cast
+from typing import Any
 
 import altair as alt
 import pandas as pd
@@ -111,10 +111,15 @@ def _tab_import(conn: sqlite3.Connection) -> None:
 
 # ── Tab: Analyze ──────────────────────────────────────────────────────────────
 
-_COLOR_COL_CONFIG = cast(
-    Any,
-    {"Color": st.column_config.ColorColumn("Color", width="small")},  # type: ignore[attr-defined]
-)
+
+def _make_color_col_config(column_config: Any) -> Any:
+    cls = getattr(column_config, "ColorColumn", None)
+    if cls is None:
+        return None
+    return {"Color": cls("Color", width="small")}
+
+
+_COLOR_COL_CONFIG = _make_color_col_config(st.column_config)
 
 
 def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
