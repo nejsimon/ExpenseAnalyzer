@@ -583,6 +583,33 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
             ],
             ignore_index=True,
         )
+
+    # Linear trend over historical actual expenses (pure Python, no new deps)
+    months_hist = df_pred_complete["month"].tolist()
+    y_vals = df_pred_complete["actual_expenses"].tolist()
+    n_hist = len(months_hist)
+    if n_hist >= 2:
+        x_mean = (n_hist - 1) / 2
+        y_mean = sum(y_vals) / n_hist
+        ss_xy = sum((i - x_mean) * (y - y_mean) for i, y in enumerate(y_vals))
+        ss_xx = sum((i - x_mean) ** 2 for i in range(n_hist))
+        if ss_xx > 0:
+            slope = ss_xy / ss_xx
+            intercept = y_mean - slope * x_mean
+            trend_rows: list[dict[str, object]] = [
+                {"month": m, "series": "Trend", "SEK": intercept + slope * i}
+                for i, m in enumerate(months_hist)
+            ]
+            if not df_pred_current.empty:
+                trend_rows.append(
+                    {
+                        "month": current_month,
+                        "series": "Trend",
+                        "SEK": intercept + slope * n_hist,
+                    }
+                )
+            df_long = pd.concat([df_long, pd.DataFrame(trend_rows)], ignore_index=True)
+
     chart3 = (
         alt.Chart(df_long)
         .mark_line(point=True)
@@ -590,6 +617,13 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
             x=alt.X("month:N", title="Month", sort=None),
             y=alt.Y("SEK:Q", title="SEK"),
             color=alt.Color("series:N", title="Series"),
+            strokeDash=alt.StrokeDash(
+                "series:N",
+                scale=alt.Scale(
+                    domain=["Actual", "Predicted", "Trend"],
+                    range=[[1, 0], [4, 2], [6, 3]],
+                ),
+            ),
             tooltip=["month", "series", alt.Tooltip("SEK:Q", format=".2f")],
         )
     )
