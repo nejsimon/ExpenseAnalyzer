@@ -300,10 +300,7 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     today = date.today()
     current_month = f"{today.year}-{today.month:02d}"
 
-    past_months = sorted(
-        (m for m in fetch_months(conn, account=account) if m < current_month),
-        reverse=True,
-    )
+    past_months = sorted(m for m in fetch_months(conn, account=account) if m < current_month)
     future_months: list[str] = []
     m = next_month(today)
     for _ in range(12):
