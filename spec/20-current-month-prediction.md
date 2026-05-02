@@ -1,6 +1,6 @@
 # 20 — Current Month in Predictions
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ## Description
 

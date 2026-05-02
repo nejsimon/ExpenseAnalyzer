@@ -1,6 +1,6 @@
 # 19 — Linting
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ## Description
 

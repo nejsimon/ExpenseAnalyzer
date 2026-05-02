@@ -1,6 +1,6 @@
 # 23 — Group Colors in Tables and Charts
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ## Description
 

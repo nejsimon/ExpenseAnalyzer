@@ -1,6 +1,6 @@
 # 18 — Type Safety
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ## Description
 

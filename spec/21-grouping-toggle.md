@@ -1,6 +1,6 @@
 # 21 — Grouping Toggle in Analyze and Predict
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ## Description
 

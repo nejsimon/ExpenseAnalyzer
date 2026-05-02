@@ -1,6 +1,6 @@
 # 22 — Per-Group "Exclude from Prediction"
 
-**Status:** [ ] pending
+**Status:** [x] done
 
 ## Description
 

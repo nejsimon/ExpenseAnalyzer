@@ -1,5 +1,7 @@
 # Spec 24 — Group Color Improvements
 
+**Status:** [x] done
+
 ## Problem
 
 Group colors are exposed only as raw hex strings — in the expander header and as a "Color" text column in data tables. The Color column shows ugly hex text (or nothing on Streamlit 1.56.0 which lacks `ColorColumn`). There is no way to edit a group's color after creation.
