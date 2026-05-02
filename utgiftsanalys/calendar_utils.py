@@ -46,3 +46,8 @@ def get_analysis_month(booking_date: date) -> str:
             return f"{y - 1}-12"
         return f"{y}-{m - 1:02d}"
     return f"{y}-{m:02d}"
+
+
+def current_analysis_month(reference: date | None = None) -> str:
+    """Return the current analysis month as 'YYYY-MM', applying the bank-day boundary rule."""
+    return get_analysis_month(reference or date.today())

@@ -9,6 +9,7 @@ import streamlit as st
 from pandas.io.formats.style import Styler
 
 from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
+from utgiftsanalys.calendar_utils import current_analysis_month
 from utgiftsanalys.chart_data import (
     GroupAmount,
     MonthActual,
@@ -231,8 +232,7 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
         st.info("No data yet. Import a CSV file first.")
         return
 
-    today = date.today()
-    current = f"{today.year}-{today.month:02d}"
+    current = current_analysis_month()
     default_idx = months.index(current) if current in months else len(months) - 1
     month = st.selectbox("Month", months, index=default_idx)
     deposits_only = st.checkbox("Deposits only")
@@ -298,7 +298,7 @@ def _prediction_df(
 def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Predict")
     today = date.today()
-    current_month = f"{today.year}-{today.month:02d}"
+    current_month = current_analysis_month()
 
     past_months = sorted(m for m in fetch_months(conn, account=account) if m < current_month)
     future_months: list[str] = []
@@ -543,9 +543,8 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
         st.caption("No recurring patterns found — skipping prediction charts.")
         return
 
-    today = date.today()
-    current_month = f"{today.year}-{today.month:02d}"
-    # Months before the current calendar month have complete actual data.
+    current_month = current_analysis_month()
+    # Months before the current analysis month have complete actual data.
     # The current month is in progress: actual is partial so deviation is misleading.
     df_pred_complete = df_pred[df_pred["month"] < current_month]
     df_pred_current = df_pred[df_pred["month"] == current_month]

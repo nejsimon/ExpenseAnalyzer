@@ -1,5 +1,6 @@
 from datetime import date
-from utgiftsanalys.calendar_utils import swedish_bank_days, get_analysis_month
+
+from utgiftsanalys.calendar_utils import current_analysis_month, get_analysis_month, swedish_bank_days
 
 
 def test_bank_days_excludes_weekends():
@@ -63,3 +64,13 @@ def test_bank_days_excludes_julafton():
 def test_bank_days_excludes_nyarsafton():
     days = swedish_bank_days(2026, 12)
     assert date(2026, 12, 31) not in days
+
+
+def test_current_analysis_month_on_first_bank_day_returns_previous():
+    first_bd_may = swedish_bank_days(2026, 5)[0]
+    assert current_analysis_month(reference=first_bd_may) == "2026-04"
+
+
+def test_current_analysis_month_on_second_bank_day_returns_current():
+    second_bd_may = swedish_bank_days(2026, 5)[1]
+    assert current_analysis_month(reference=second_bd_may) == "2026-05"

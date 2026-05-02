@@ -1,9 +1,9 @@
-from datetime import date
 from typing import TypedDict, cast
 
 import click
 
 from .adapters import ADAPTERS, AmbiguousAdapterError
+from .calendar_utils import current_analysis_month
 from .db import (
     DEFAULT_DB_PATH,
     add_group_member,
@@ -101,8 +101,7 @@ def analyze(
 ) -> None:
     """Show recurring patterns and one-offs."""
     if month is None:
-        today = date.today()
-        month = f"{today.year}-{today.month:02d}"
+        month = current_analysis_month()
     ctx_obj = cast(ContextObject, ctx.obj)
     conn = get_connection(ctx_obj["db"])
     init_db(conn)
@@ -130,8 +129,7 @@ def analyze(
 @click.pass_context
 def predict(ctx: click.Context, month: str | None, fmt: str, flat: bool) -> None:
     """Predict expenses and income for a given month."""
-    today = date.today()
-    current_month = f"{today.year}-{today.month:02d}"
+    current_month = current_analysis_month()
     if month is None:
         month = current_month
     ctx_obj = cast(ContextObject, ctx.obj)

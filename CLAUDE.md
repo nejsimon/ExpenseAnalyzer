@@ -42,6 +42,7 @@ The lockfile `uv.lock` is committed and pins all transitive dependencies.
 
 - Only outgoing transactions (negative Belopp) are analyzed
 - Month boundary: first bank day of month M belongs to M-1; second+ to M
+- Current analysis month: always use `current_analysis_month()` from `calendar_utils.py` — never `date.today()` directly — so the boundary rule applies everywhere
 - Dedup key: SHA-256(booking_date + reference + description + amount)
 - Recurring detection requires ≥2 occurrences; gap stddev < 30% of mean gap
 - Match key for recurring: both Referens AND Beskrivning must match
