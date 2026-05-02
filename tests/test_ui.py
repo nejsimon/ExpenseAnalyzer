@@ -1,27 +1,17 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from utgiftsanalys.ui import _make_color_col_config
+from utgiftsanalys.ui import _contrast_color
 
 
-def test_returns_none_when_color_column_absent():
-    cfg = SimpleNamespace()  # no ColorColumn attribute
-    assert _make_color_col_config(cfg) is None
+def test_contrast_color_light_bg_gives_black():
+    assert _contrast_color("#ffffff") == "#000000"
 
 
-def test_builds_dict_when_color_column_present():
-    mock_cls = MagicMock(return_value="sentinel")
-    cfg = SimpleNamespace(ColorColumn=mock_cls)
-    result = _make_color_col_config(cfg)
-    assert result is not None
-    assert "Color" in result
-    mock_cls.assert_called_once_with("Color", width="small")
+def test_contrast_color_dark_bg_gives_white():
+    assert _contrast_color("#000000") == "#ffffff"
 
 
-def test_returns_none_for_installed_streamlit_when_color_column_missing():
-    import streamlit as st
-
-    # ColorColumn is absent in the installed version; confirm the real code path
-    result = _make_color_col_config(st.column_config)
-    assert getattr(st.column_config, "ColorColumn", None) is None
-    assert result is None
+def test_contrast_color_pure_blue_gives_white():
+    # pure blue: L = 0.0722 * 1.0 = 0.0722 < 0.179 → white text
+    assert _contrast_color("#0000ff") == "#ffffff"

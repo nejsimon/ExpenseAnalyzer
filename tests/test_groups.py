@@ -13,6 +13,7 @@ from utgiftsanalys.db import (
     insert_group,
     remove_group_member,
     set_group_exclude,
+    update_group_color,
 )
 from utgiftsanalys.recurring import build_patterns
 
@@ -213,3 +214,17 @@ def test_build_patterns_propagates_exclude_flag():
     patterns, _ = build_patterns(conn, reference_date=date(2025, 5, 1))
     assert len(patterns) == 1
     assert patterns[0].exclude_from_prediction is True
+
+
+def test_update_group_color_roundtrip():
+    conn = _make_conn()
+    insert_group(conn, "phone", "expenses", "#ff0000")
+    result = update_group_color(conn, "phone", "#00ff00")
+    assert result is True
+    grp = conn.execute("SELECT color FROM groups WHERE name='phone'").fetchone()
+    assert grp["color"] == "#00ff00"
+
+
+def test_update_group_color_missing_group_returns_false():
+    conn = _make_conn()
+    assert update_group_color(conn, "nonexistent", "#ff0000") is False

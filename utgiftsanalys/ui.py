@@ -2,11 +2,11 @@ import os
 import sqlite3
 import tempfile
 from datetime import date
-from typing import Any
 
 import altair as alt
 import pandas as pd
 import streamlit as st
+from pandas.io.formats.style import Styler
 
 from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
 from utgiftsanalys.chart_data import (
@@ -31,6 +31,7 @@ from utgiftsanalys.db import (
     insert_group,
     remove_group_member,
     set_group_exclude,
+    update_group_color,
 )
 from utgiftsanalys.importer import import_file
 from utgiftsanalys.predictor import PredictionLine, enrich_with_actuals, next_month, predict_month
@@ -112,14 +113,23 @@ def _tab_import(conn: sqlite3.Connection) -> None:
 # ── Tab: Analyze ──────────────────────────────────────────────────────────────
 
 
-def _make_color_col_config(column_config: Any) -> Any:
-    cls = getattr(column_config, "ColorColumn", None)
-    if cls is None:
-        return None
-    return {"Color": cls("Color", width="small")}
+def _contrast_color(hex_color: str) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return "#000000" if luminance > 0.179 else "#ffffff"
 
 
-_COLOR_COL_CONFIG = _make_color_col_config(st.column_config)
+def _style_by_color(df: pd.DataFrame, color_map: dict[str, str]) -> Styler:
+    def _row(row: pd.Series) -> list[str]:
+        color = color_map.get(str(row["Merchant"]))
+        if color is None:
+            return [""] * len(row)
+        text = _contrast_color(color)
+        s = f"background-color: {color}; color: {text}"
+        return [s] * len(row)
+
+    return df.style.apply(_row, axis=1)
 
 
 def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
@@ -132,7 +142,6 @@ def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
         status = f"canceled (last: {p.end_date})" if p.status == "canceled" else "active"
         rows.append(
             {
-                "Color": p.color if p.color is not None else "#ffffff",
                 "Merchant": p.description,
                 "Cadence": p.cadence,
                 "Amount": amount,
@@ -210,7 +219,7 @@ def _render_recurring_section(
 
     df = _pattern_df(indiv_pats)
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True, column_config=_COLOR_COL_CONFIG)
+        st.dataframe(df, width="stretch", hide_index=True)
     elif not group_pats:
         st.caption("(none)")
 
@@ -273,7 +282,6 @@ def _prediction_df(lines: list[PredictionLine], show_actuals: bool = False) -> p
     rows = []
     for line in lines:
         row: dict[str, str] = {
-            "Color": line.color if line.color is not None else "#ffffff",
             "Merchant": line.description,
             "Cadence": line.cadence,
             "Predicted (SEK)": f"{line.predicted_amount:.2f}",
@@ -323,14 +331,16 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.subheader("Expense predictions")
     df = _prediction_df(exp_lines, show_actuals=show_actuals)
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True, column_config=_COLOR_COL_CONFIG)
+        exp_colors = {ln.description: ln.color for ln in exp_lines if ln.color is not None}
+        st.dataframe(_style_by_color(df, exp_colors), width="stretch", hide_index=True)
     else:
         st.caption("(none)")
 
     st.subheader("Income predictions")
     df = _prediction_df(inc_lines, show_actuals=show_actuals)
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True, column_config=_COLOR_COL_CONFIG)
+        inc_colors = {ln.description: ln.color for ln in inc_lines if ln.color is not None}
+        st.dataframe(_style_by_color(df, inc_colors), width="stretch", hide_index=True)
     else:
         st.caption("(none)")
 
@@ -606,11 +616,17 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
         return
 
     for grp in all_groups:
-        with st.expander(f"{grp['name']}  ·  {grp['direction']}  ·  {grp['color']}"):
+        with st.expander(f"{grp['name']}  ·  {grp['direction']}"):
             col1, col2 = st.columns([5, 1])
             col1.markdown(f"**{grp['name']}** — {grp['direction']}")
             if col2.button("Delete", key=f"del_grp_{grp['id']}", type="secondary"):
                 delete_group(conn, grp["name"])
+                st.cache_data.clear()
+                st.rerun()
+
+            new_color = st.color_picker("Color", value=grp["color"], key=f"color_{grp['id']}")
+            if new_color != grp["color"]:
+                update_group_color(conn, grp["name"], new_color)
                 st.cache_data.clear()
                 st.rerun()
 

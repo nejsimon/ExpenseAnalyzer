@@ -192,6 +192,13 @@ def set_group_exclude(conn: sqlite3.Connection, name: str, exclude: bool) -> boo
     return cursor.rowcount == 1
 
 
+def update_group_color(conn: sqlite3.Connection, name: str, color: str) -> bool:
+    """Update the color of a group. Returns True if the group was found."""
+    cursor = conn.execute("UPDATE groups SET color = ? WHERE name = ?", (color, name))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def add_group_member(
     conn: sqlite3.Connection,
     group_name: str,
