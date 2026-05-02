@@ -278,7 +278,9 @@ def _actual_str(line: PredictionLine) -> str:
     return f"{line.actual_amount:.2f} ({line.members_seen}/{line.member_count} members)"
 
 
-def _prediction_df(lines: list[PredictionLine], show_actuals: bool = False) -> pd.DataFrame:
+def _prediction_df(
+    lines: list[PredictionLine], show_actuals: bool = False, actual_label: str = "Actual"
+) -> pd.DataFrame:
     rows = []
     for line in lines:
         row: dict[str, str] = {
@@ -288,7 +290,7 @@ def _prediction_df(lines: list[PredictionLine], show_actuals: bool = False) -> p
             "Range": line.range_str or "—",
         }
         if show_actuals:
-            row["Actual (so far)"] = _actual_str(line)
+            row[actual_label] = _actual_str(line)
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -297,7 +299,12 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Predict")
     today = date.today()
     current_month = f"{today.year}-{today.month:02d}"
-    future_months: list[str] = [current_month]
+
+    past_months = sorted(
+        (m for m in fetch_months(conn, account=account) if m < current_month),
+        reverse=True,
+    )
+    future_months: list[str] = []
     m = next_month(today)
     for _ in range(12):
         future_months.append(m)
@@ -307,7 +314,9 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
             y += 1
             mo = 1
         m = f"{y}-{mo:02d}"
-    month = st.selectbox("Month", future_months)
+    all_months = past_months + [current_month] + future_months
+    default_idx = len(past_months)  # current month
+    month = st.selectbox("Month", all_months, index=default_idx)
     grouped = st.checkbox("Group transactions", value=True, key="predict_grouped")
 
     exp_patterns, _ = build_patterns(conn, account=account, direction="expenses", grouped=grouped)
@@ -315,7 +324,8 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
 
-    show_actuals = month == current_month
+    show_actuals = month <= current_month
+    actual_label = "Actual (so far)" if month == current_month else "Actual"
     if show_actuals:
         enrich_with_actuals(conn, exp_lines, month, "expenses", account)
         enrich_with_actuals(conn, inc_lines, month, "income", account)
@@ -329,7 +339,7 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     col3.metric("Net", f"{inc_total - exp_total:,.2f} SEK")
 
     st.subheader("Expense predictions")
-    df = _prediction_df(exp_lines, show_actuals=show_actuals)
+    df = _prediction_df(exp_lines, show_actuals=show_actuals, actual_label=actual_label)
     if not df.empty:
         exp_colors = {ln.description: ln.color for ln in exp_lines if ln.color is not None}
         st.dataframe(_style_by_color(df, exp_colors), width="stretch", hide_index=True)
@@ -337,7 +347,7 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
         st.caption("(none)")
 
     st.subheader("Income predictions")
-    df = _prediction_df(inc_lines, show_actuals=show_actuals)
+    df = _prediction_df(inc_lines, show_actuals=show_actuals, actual_label=actual_label)
     if not df.empty:
         inc_colors = {ln.description: ln.color for ln in inc_lines if ln.color is not None}
         st.dataframe(_style_by_color(df, inc_colors), width="stretch", hide_index=True)
