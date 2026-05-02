@@ -536,21 +536,47 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
         st.caption("No recurring patterns found — skipping prediction charts.")
         return
 
+    today = date.today()
+    current_month = f"{today.year}-{today.month:02d}"
+    # Months before the current calendar month have complete actual data.
+    # The current month is in progress: actual is partial so deviation is misleading.
+    df_pred_complete = df_pred[df_pred["month"] < current_month]
+    df_pred_current = df_pred[df_pred["month"] == current_month]
+
     # Chart 3 — Predicted vs actual expenses
     st.subheader("Predicted vs actual expenses")
-    st.caption("Predictions use all-time patterns applied retroactively (approximate).")
-    df_long = df_pred.melt(
+    caption3 = "Predictions use all-time patterns applied retroactively (approximate)."
+    if not df_pred_current.empty:
+        caption3 += " Current month shows predicted only (in progress)."
+    st.caption(caption3)
+
+    # Historical rows contribute both Actual and Predicted; current month Predicted only.
+    df_long = df_pred_complete.melt(
         id_vars="month",
         value_vars=["actual_expenses", "predicted_expenses"],
         var_name="series",
         value_name="SEK",
     )
     df_long["series"] = df_long["series"].map(
-        {
-            "actual_expenses": "Actual",
-            "predicted_expenses": "Predicted",
-        }
+        {"actual_expenses": "Actual", "predicted_expenses": "Predicted"}
     )
+    if not df_pred_current.empty:
+        row = df_pred_current.iloc[0]
+        df_long = pd.concat(
+            [
+                df_long,
+                pd.DataFrame(
+                    [
+                        {
+                            "month": row["month"],
+                            "series": "Predicted",
+                            "SEK": row["predicted_expenses"],
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
     chart3 = (
         alt.Chart(df_long)
         .mark_line(point=True)
@@ -563,24 +589,29 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     )
     st.altair_chart(chart3, width="stretch")
 
-    # Chart 4 — Prediction deviation
+    # Chart 4 — Prediction deviation (complete months only)
     st.subheader("Prediction deviation (predicted − actual)")
-    deviation_color = alt.condition(
-        alt.datum.deviation > 0,
-        alt.value("#e74c3c"),  # red = over-predicted
-        alt.value("#2ecc71"),  # green = under-predicted
-    )
-    chart4 = (
-        alt.Chart(df_pred)
-        .mark_bar()
-        .encode(
-            x=alt.X("month:N", title="Month", sort=None),
-            y=alt.Y("deviation:Q", title="SEK (predicted − actual)"),
-            color=deviation_color,
-            tooltip=["month", alt.Tooltip("deviation:Q", format=".2f")],
+    if df_pred_complete.empty:
+        st.caption("No complete months in range.")
+    else:
+        if not df_pred_current.empty:
+            st.caption("Current month excluded (in progress).")
+        deviation_color = alt.condition(
+            alt.datum.deviation > 0,
+            alt.value("#e74c3c"),  # red = over-predicted
+            alt.value("#2ecc71"),  # green = under-predicted
         )
-    )
-    st.altair_chart(chart4, width="stretch")
+        chart4 = (
+            alt.Chart(df_pred_complete)
+            .mark_bar()
+            .encode(
+                x=alt.X("month:N", title="Month", sort=None),
+                y=alt.Y("deviation:Q", title="SEK (predicted − actual)"),
+                color=deviation_color,
+                tooltip=["month", alt.Tooltip("deviation:Q", format=".2f")],
+            )
+        )
+        st.altair_chart(chart4, width="stretch")
 
 
 # ── Tab: Groups ──────────────────────────────────────────────────────────────
