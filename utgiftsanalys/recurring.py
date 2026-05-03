@@ -183,9 +183,15 @@ def build_patterns(
     for (ref, desc), txs in key_groups.items():
         txs_sorted = sorted(txs, key=lambda t: t["booking_date"])
         dates = [date.fromisoformat(t["booking_date"]) for t in txs_sorted]
-        amounts = [t["amount"] for t in txs_sorted]
 
-        cadence = _detect_cadence([t["analysis_month"] for t in txs_sorted])
+        # Sum transactions per analysis_month — handles multiple same-key txs in one month
+        month_to_amounts: dict[str, list[float]] = {}
+        for tx in txs_sorted:
+            month_to_amounts.setdefault(tx["analysis_month"], []).append(tx["amount"])
+        months_sorted = sorted(month_to_amounts)
+        amounts = [sum(month_to_amounts[m]) for m in months_sorted]
+
+        cadence = _detect_cadence(months_sorted)
         if cadence is None:
             for tx in txs:
                 one_offs.append(
@@ -229,7 +235,7 @@ def build_patterns(
                 end_date=end_date,
                 status=status,
                 amounts=amounts,
-                last_analysis_month=max(t["analysis_month"] for t in txs_sorted),
+                last_analysis_month=months_sorted[-1],
             )
         )
 

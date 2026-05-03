@@ -131,16 +131,18 @@ def test_start_date_is_first_occurrence():
 
 
 def test_multiple_line_items_per_month_detected_as_monthly():
-    """Multiple transactions on the same date (e.g. Lf Uppsala) must not break detection."""
+    """Multiple transactions per month with the same key are summed into one monthly amount."""
     conn = _make_conn()
-    base = date(2025, 1, 2)
     for month in range(6):
         booking = date(2025, 1 + month, 2)
         for amount in [-182.0, -186.0, -195.0]:
             _add_tx(conn, "Lf Uppsala", "Lf Uppsala", amount, booking)
     patterns, one_offs = build_patterns(conn, reference_date=date(2025, 8, 1))
     assert len(patterns) == 1
-    assert patterns[0].cadence == "monthly"
+    p = patterns[0]
+    assert p.cadence == "monthly"
+    assert p.amount_type == "fixed"
+    assert p.fixed_amount == pytest.approx(563.0)  # 182 + 186 + 195
     assert len(one_offs) == 0
 
 
