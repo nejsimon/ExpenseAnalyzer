@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import tempfile
-from datetime import date
 
 import altair as alt
 import pandas as pd
@@ -35,7 +34,7 @@ from utgiftsanalys.db import (
     update_group_color,
 )
 from utgiftsanalys.importer import import_file
-from utgiftsanalys.predictor import PredictionLine, enrich_with_actuals, next_month, predict_month
+from utgiftsanalys.predictor import PredictionLine, enrich_with_actuals, predict_month
 from utgiftsanalys.recurring import OneOff, RecurringPattern, build_patterns
 from utgiftsanalys.stats import YearStats, compute_stats
 
@@ -167,62 +166,15 @@ def _one_off_df(one_offs: list[OneOff]) -> pd.DataFrame:
 
 
 def _render_recurring_section(
-    conn: sqlite3.Connection,
     patterns: list[RecurringPattern],
-    direction: str,
-    month: str,
-    account: str | None,
 ) -> None:
-    """Render recurring patterns: groups as expanders, individuals as a flat table."""
-    group_pats = [p for p in patterns if p.color is not None]
-    indiv_pats = [p for p in patterns if p.color is None]
-
-    if group_pats:
-        grp_map = {g["name"]: g for g in fetch_groups(conn, direction=direction)}
-        outgoing = direction == "expenses"
-        month_txs = fetch_transactions(
-            conn,
-            month=month,
-            outgoing_only=outgoing,
-            incoming_only=(not outgoing),
-            account=account,
-        )
-        for p in group_pats:
-            if p.amount_type == "fixed":
-                amt_str = f"{p.fixed_amount:.2f} (fixed)"
-            else:
-                amt_str = f"{p.min_amount:.2f}–{p.max_amount:.2f} (var)"
-            status_str = "canceled" if p.status == "canceled" else "active"
-            with st.expander(f"{p.description} — {p.cadence} — {amt_str} — {status_str}"):
-                grp = grp_map.get(p.description)
-                if grp:
-                    members = fetch_group_members(conn, grp["id"])
-                    member_keys = {(m["reference"], m["description"]) for m in members}
-                    member_txs = [
-                        t
-                        for t in month_txs
-                        if (t["reference"] or "", t["description"] or "") in member_keys
-                    ]
-                    if member_txs:
-                        df = pd.DataFrame(
-                            [
-                                {
-                                    "Merchant": t["description"],
-                                    "Date": t["booking_date"],
-                                    "Amount": f"{abs(t['amount']):.2f}",
-                                }
-                                for t in member_txs
-                            ]
-                        )
-                        st.dataframe(df, hide_index=True, width="stretch")
-                    else:
-                        st.caption("No transactions this month.")
-
-    df = _pattern_df(indiv_pats)
-    if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True)
-    elif not group_pats:
+    """Render all recurring patterns in a single table with group rows colored."""
+    df = _pattern_df(patterns)
+    if df.empty:
         st.caption("(none)")
+        return
+    color_map = {p.description: p.color for p in patterns if p.color is not None}
+    st.dataframe(_style_by_color(df, color_map), width="stretch", hide_index=True)
 
 
 def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
@@ -249,7 +201,7 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
 
     if not deposits_only:
         st.subheader("Expenses — recurring")
-        _render_recurring_section(conn, exp_patterns, "expenses", month, account)
+        _render_recurring_section(exp_patterns)
         st.subheader("Expenses — one-offs")
         df = _one_off_df(exp_one_offs)
         if not df.empty:
@@ -258,7 +210,7 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
             st.caption("(none)")
 
     st.subheader("Income — recurring")
-    _render_recurring_section(conn, inc_patterns, "income", month, account)
+    _render_recurring_section(inc_patterns)
     st.subheader("Income — one-offs")
     df = _one_off_df(inc_one_offs)
     if not df.empty:
@@ -297,12 +249,17 @@ def _prediction_df(
 
 def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     st.header("Predict")
-    today = date.today()
     current_month = current_analysis_month()
 
     past_months = sorted(m for m in fetch_months(conn, account=account) if m < current_month)
+    # Start future months from the month after current_month (not after date.today(),
+    # which can skip a month when today is still in the pre-first-bank-day window).
     future_months: list[str] = []
-    m = next_month(today)
+    cy, cmo = int(current_month[:4]), int(current_month[5:7])
+    cmo += 1
+    if cmo > 12:
+        cy, cmo = cy + 1, 1
+    m = f"{cy}-{cmo:02d}"
     for _ in range(12):
         future_months.append(m)
         y, mo = int(m[:4]), int(m[5:7])
