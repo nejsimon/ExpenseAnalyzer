@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS group_members (
     group_id    INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     reference   TEXT NOT NULL,
     description TEXT NOT NULL,
+    is_offset   INTEGER NOT NULL DEFAULT 0,
     UNIQUE (reference, description)
 );
 """
@@ -71,13 +72,15 @@ def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_DDL)
     conn.commit()
-    try:
-        conn.execute(
-            "ALTER TABLE groups ADD COLUMN exclude_from_prediction INTEGER NOT NULL DEFAULT 0"
-        )
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    for migration in [
+        "ALTER TABLE groups ADD COLUMN exclude_from_prediction INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE group_members ADD COLUMN is_offset INTEGER NOT NULL DEFAULT 0",
+    ]:
+        try:
+            conn.execute(migration)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
 
 def insert_transaction(conn: sqlite3.Connection, tx: TransactionDict) -> bool:
@@ -204,15 +207,19 @@ def add_group_member(
     group_name: str,
     reference: str,
     description: str,
+    is_offset: bool = False,
 ) -> None:
     """Add (reference, description) to the named group.
+
+    Set is_offset=True for cross-direction transactions (e.g. an expense that
+    partially offsets an income group such as a back-transfer).
     Raises sqlite3.IntegrityError if the key is already in any group."""
     conn.execute(
         """
-        INSERT INTO group_members (group_id, reference, description)
-        VALUES ((SELECT id FROM groups WHERE name = ?), ?, ?)
+        INSERT INTO group_members (group_id, reference, description, is_offset)
+        VALUES ((SELECT id FROM groups WHERE name = ?), ?, ?, ?)
         """,
-        (group_name, reference, description),
+        (group_name, reference, description, int(is_offset)),
     )
     conn.commit()
 
@@ -220,6 +227,18 @@ def add_group_member(
 def fetch_all_group_member_keys(conn: sqlite3.Connection) -> set[tuple[str, str]]:
     """Return all (reference, description) pairs currently assigned to any group."""
     rows = conn.execute("SELECT reference, description FROM group_members").fetchall()
+    return {(r["reference"], r["description"]) for r in rows}
+
+
+def fetch_offset_member_keys(conn: sqlite3.Connection) -> set[tuple[str, str]]:
+    """Return (reference, description) pairs that are offset members of any group.
+
+    Offset members are cross-direction transactions (e.g. back-transfer expenses
+    inside an income group) that should be excluded from their native direction view.
+    """
+    rows = conn.execute(
+        "SELECT reference, description FROM group_members WHERE is_offset = 1"
+    ).fetchall()
     return {(r["reference"], r["description"]) for r in rows}
 
 

@@ -689,6 +689,8 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
                         if m["reference"] == m["description"]
                         else f"{m['reference']} / {m['description']}"
                     )
+                    if m["is_offset"]:
+                        label = f"{label} (offset)"
                     mc1.text(label)
                     if mc2.button("Remove", key=f"rem_{grp['id']}_{m['id']}"):
                         remove_group_member(conn, grp["name"], m["reference"], m["description"])
@@ -697,18 +699,36 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
             else:
                 st.caption("No members yet.")
 
-            # Add members
-            outgoing = grp["direction"] == "expenses"
-            all_txs = fetch_transactions(conn, outgoing_only=outgoing, incoming_only=(not outgoing))
+            # Add members — income groups may also accept expense transactions as
+            # offsets (e.g. a back-transfer that reduces the deposit total).
+            all_txs = fetch_transactions(conn, outgoing_only=False, incoming_only=False)
+            # Build a map from key → typical direction so we can label offsets
+            key_is_expense: dict[tuple[str, str], bool] = {}
+            for t in all_txs:
+                key = (t["reference"] or "", t["description"] or "")
+                if key not in key_is_expense:
+                    key_is_expense[key] = t["amount"] < 0
+
+            # For expense groups show only expense transactions; income groups show all
+            if grp["direction"] == "expenses":
+                candidate_keys = {k for k, is_exp in key_is_expense.items() if is_exp}
+            else:
+                candidate_keys = set(key_is_expense)
+
             known_pairs = sorted(
-                {(t["reference"] or "", t["description"] or "") for t in all_txs},
+                candidate_keys,
                 key=lambda k: k[1].lower(),
             )
             available = [
                 (ref, desc) for ref, desc in known_pairs if (ref, desc) not in all_assigned_keys
             ]
             if available:
-                labels = [desc if ref == desc else f"{ref} / {desc}" for ref, desc in available]
+                labels = []
+                for ref, desc in available:
+                    base = desc if ref == desc else f"{ref} / {desc}"
+                    if grp["direction"] == "income" and key_is_expense.get((ref, desc)):
+                        base = f"{base} (offset)"
+                    labels.append(base)
                 with st.form(key=f"add_members_form_{grp['id']}"):
                     selected = st.multiselect("Add members", labels)
                     if st.form_submit_button("Add selected"):
@@ -716,8 +736,11 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
                         added = 0
                         for lbl in selected:
                             ref, desc = label_to_pair[lbl]
+                            is_offset = grp["direction"] == "income" and key_is_expense.get(
+                                (ref, desc), False
+                            )
                             try:
-                                add_group_member(conn, grp["name"], ref, desc)
+                                add_group_member(conn, grp["name"], ref, desc, is_offset=is_offset)
                                 added += 1
                             except sqlite3.IntegrityError:
                                 st.warning(f"'{desc}' is already in another group.")

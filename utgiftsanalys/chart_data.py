@@ -1,7 +1,13 @@
 import sqlite3
 from typing import TypedDict
 
-from .db import fetch_group_members, fetch_groups, fetch_months, fetch_transactions
+from .db import (
+    fetch_group_members,
+    fetch_groups,
+    fetch_months,
+    fetch_offset_member_keys,
+    fetch_transactions,
+)
 from .predictor import predict_month
 from .recurring import build_patterns
 
@@ -29,11 +35,20 @@ class GroupAmount(TypedDict):
 
 
 def monthly_actuals(conn: sqlite3.Connection, account: str | None = None) -> list[MonthActual]:
-    """Return per-month expense and income totals for all months in the DB."""
+    """Return per-month expense and income totals for all months in the DB.
+
+    Offset expense transactions (back-transfers attributed to income groups) are
+    excluded from the expense total — they are netted into the income group instead.
+    """
+    offset_keys = fetch_offset_member_keys(conn)
     rows: list[MonthActual] = []
     for month in fetch_months(conn, account=account):
         txs = fetch_transactions(conn, month=month, outgoing_only=False, account=account)
-        expenses = sum(abs(t["amount"]) for t in txs if t["amount"] < 0)
+        expenses = sum(
+            abs(t["amount"])
+            for t in txs
+            if t["amount"] < 0 and (t["reference"] or "", t["description"] or "") not in offset_keys
+        )
         income = sum(t["amount"] for t in txs if t["amount"] > 0)
         rows.append({"month": month, "expenses": expenses, "income": income})
     return rows
@@ -44,11 +59,31 @@ def monthly_group_breakdown(
     direction: str = "expenses",
     account: str | None = None,
 ) -> list[GroupAmount]:
-    """Return per-month amounts split by group and an 'Other' catch-all."""
+    """Return per-month amounts split by group and an 'Other' catch-all.
+
+    For the expense direction, offset transactions (expenses attributed to income
+    groups as back-transfers) are excluded — they are invisible in expense charts.
+    For the income direction, offset expenses belonging to each group are fetched
+    separately and subtracted (netted) from the group's monthly total.
+    """
     member_to_group: dict[tuple[str, str], tuple[str, str]] = {}
     for grp in fetch_groups(conn, direction=direction):
         for m in fetch_group_members(conn, grp["id"]):
-            member_to_group[(m["reference"], m["description"])] = (grp["name"], grp["color"])
+            if not m["is_offset"]:
+                member_to_group[(m["reference"], m["description"])] = (grp["name"], grp["color"])
+
+    # Build reverse map: offset member key → (income group name, color)
+    offset_to_group: dict[tuple[str, str], tuple[str, str]] = {}
+    if direction == "income":
+        for grp in fetch_groups(conn, direction="income"):
+            for m in fetch_group_members(conn, grp["id"]):
+                if m["is_offset"]:
+                    offset_to_group[(m["reference"], m["description"])] = (
+                        grp["name"],
+                        grp["color"],
+                    )
+
+    offset_keys = fetch_offset_member_keys(conn)
 
     result: list[GroupAmount] = []
     for month in fetch_months(conn, account=account):
@@ -62,10 +97,25 @@ def monthly_group_breakdown(
         totals: dict[tuple[str, str], float] = {}
         for tx in txs:
             key = (tx["reference"] or "", tx["description"] or "")
+            if direction == "expenses" and key in offset_keys:
+                continue  # offset expense belongs to an income group; hide it here
             group_name, color = member_to_group.get(key, ("Other", _OTHER_COLOR))
             totals[(group_name, color)] = totals.get((group_name, color), 0.0) + abs(tx["amount"])
+
+        # For income direction: subtract offset expense amounts from their income group
+        if direction == "income" and offset_to_group:
+            offset_txs = fetch_transactions(conn, month=month, outgoing_only=True, account=account)
+            for tx in offset_txs:
+                key = (tx["reference"] or "", tx["description"] or "")
+                if key in offset_to_group:
+                    group_name, color = offset_to_group[key]
+                    totals[(group_name, color)] = totals.get((group_name, color), 0.0) - abs(
+                        tx["amount"]
+                    )
+
         for (group, color), amount in totals.items():
-            result.append({"month": month, "group": group, "color": color, "amount": amount})
+            if amount > 0:
+                result.append({"month": month, "group": group, "color": color, "amount": amount})
     return result
 
 

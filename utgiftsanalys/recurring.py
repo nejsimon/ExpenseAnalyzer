@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-from .db import fetch_group_members, fetch_groups, fetch_transactions
+from .db import fetch_all_group_member_keys, fetch_group_members, fetch_groups, fetch_transactions
 
 AmountClassification = tuple[Literal["fixed"], float] | tuple[Literal["variable"], float, float]
 
@@ -97,27 +97,45 @@ def build_patterns(
         account=account,
     )
 
-    # Index all rows by (reference, description) for efficient group lookup
+    # Index direction-filtered rows by (reference, description)
     key_to_rows: dict[tuple[str, str], list[sqlite3.Row]] = {}
     for row in rows:
         key = (row["reference"] or "", row["description"] or "")
         key_to_rows.setdefault(key, []).append(row)
 
+    # For income groups that contain offset expense members, we need all-direction
+    # rows so the offset amounts can be netted against the income amounts.
+    if direction == "income":
+        all_rows = fetch_transactions(
+            conn, outgoing_only=False, incoming_only=False, account=account
+        )
+        all_key_to_rows: dict[tuple[str, str], list[sqlite3.Row]] = {}
+        for row in all_rows:
+            key = (row["reference"] or "", row["description"] or "")
+            all_key_to_rows.setdefault(key, []).append(row)
+    else:
+        all_key_to_rows = key_to_rows
+
     patterns: list[RecurringPattern] = []
     one_offs: list[OneOff] = []
-    excluded_keys: set[tuple[str, str]] = set()
+    # Pre-populate excluded_keys with ALL group members across all directions so
+    # that offset expense transactions (members of income groups) are hidden from
+    # the expense individual-pattern phase, and vice-versa.
+    # Only when grouped=True — grouped=False is an explicit request to see individual keys.
+    excluded_keys: set[tuple[str, str]] = fetch_all_group_member_keys(conn) if grouped else set()
 
     # ── Group phase: process named groups before individual keys ──────────────
     if grouped:
         for grp in fetch_groups(conn, direction=direction):
             members = fetch_group_members(conn, grp["id"])
             member_keys = {(m["reference"], m["description"]) for m in members}
-            excluded_keys |= member_keys
+            excluded_keys |= member_keys  # redundant but harmless
 
             month_amounts: dict[str, list[float]] = {}
             all_group_txs: list[sqlite3.Row] = []
             for mk in member_keys:
-                for tx in key_to_rows.get(mk, []):
+                # Use all_key_to_rows so income groups pick up offset expense amounts.
+                for tx in all_key_to_rows.get(mk, []):
                     month_amounts.setdefault(tx["analysis_month"], []).append(tx["amount"])
                     all_group_txs.append(tx)
 
