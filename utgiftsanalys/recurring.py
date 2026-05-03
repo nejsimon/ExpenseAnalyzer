@@ -26,6 +26,7 @@ class RecurringPattern:
     amounts: list[float]
     color: str | None = None
     exclude_from_prediction: bool = False
+    last_analysis_month: str = ""  # analysis month of the most recent occurrence
 
 
 @dataclass
@@ -168,6 +169,7 @@ def build_patterns(
                     amounts=synthetic_amounts,
                     color=grp["color"],
                     exclude_from_prediction=bool(grp["exclude_from_prediction"]),
+                    last_analysis_month=max(synthetic_months),
                 )
             )
 
@@ -227,6 +229,7 @@ def build_patterns(
                 end_date=end_date,
                 status=status,
                 amounts=amounts,
+                last_analysis_month=max(t["analysis_month"] for t in txs_sorted),
             )
         )
 

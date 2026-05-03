@@ -28,10 +28,19 @@ def _hits_month(pattern: RecurringPattern, target_year: int, target_month: int) 
         return False
     if pattern.cadence == "monthly":
         return True
+    # Use last_analysis_month as phase anchor when available — prevents drift when
+    # start_date falls in a different cycle than recent occurrences.
+    if pattern.last_analysis_month:
+        anchor_year = int(pattern.last_analysis_month[:4])
+        anchor_month = int(pattern.last_analysis_month[5:7])
+        anchor_index = anchor_year * 12 + anchor_month
+    else:
+        anchor_index = start_index
     if pattern.cadence == "quarterly":
-        return (target_index - start_index) % 3 == 0
+        return (target_index - anchor_index) % 3 == 0
     if pattern.cadence == "yearly":
-        return target_month == start.month
+        hit_month = anchor_month if pattern.last_analysis_month else start.month
+        return target_month == hit_month
     return False
 
 

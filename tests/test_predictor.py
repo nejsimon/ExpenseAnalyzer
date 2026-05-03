@@ -85,6 +85,24 @@ def test_hits_yearly_same_month_only():
     assert not _hits_month(p, 2026, 2)
 
 
+def test_hits_quarterly_uses_last_analysis_month_as_anchor():
+    # start_date = 2024-04, last_analysis_month = 2026-03
+    # Without anchor fix: target 2026-04 hits (diff from start = 24 months = 8 quarters)
+    # With anchor fix: anchor is 2026-03, diff to 2026-04 = 1 month → miss; 2026-06 = 3 months → hit
+    p = _make_pattern("quarterly", "fixed", [-300], date(2024, 4, 15))
+    p.last_analysis_month = "2026-03"
+    assert not _hits_month(p, 2026, 4)
+    assert _hits_month(p, 2026, 6)
+
+
+def test_hits_yearly_uses_last_analysis_month_as_anchor():
+    # start_date = 2024-04, last_analysis_month = 2025-03 → yearly hits in March
+    p = _make_pattern("yearly", "fixed", [-100], date(2024, 4, 1))
+    p.last_analysis_month = "2025-03"
+    assert _hits_month(p, 2026, 3)
+    assert not _hits_month(p, 2026, 4)
+
+
 def test_hits_before_start_returns_false():
     p = _make_pattern("monthly", "fixed", [-100], date(2026, 6, 1))
     assert not _hits_month(p, 2026, 5)
