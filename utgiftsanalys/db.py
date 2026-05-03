@@ -217,6 +217,12 @@ def add_group_member(
     conn.commit()
 
 
+def fetch_all_group_member_keys(conn: sqlite3.Connection) -> set[tuple[str, str]]:
+    """Return all (reference, description) pairs currently assigned to any group."""
+    rows = conn.execute("SELECT reference, description FROM group_members").fetchall()
+    return {(r["reference"], r["description"]) for r in rows}
+
+
 def remove_group_member(
     conn: sqlite3.Connection,
     group_name: str,

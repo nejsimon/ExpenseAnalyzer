@@ -22,6 +22,7 @@ from utgiftsanalys.db import (
     add_group_member,
     delete_group,
     fetch_accounts,
+    fetch_all_group_member_keys,
     fetch_group_members,
     fetch_groups,
     fetch_months,
@@ -651,6 +652,8 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
         st.info("No groups yet. Create one above.")
         return
 
+    all_assigned_keys = fetch_all_group_member_keys(conn)
+
     for grp in all_groups:
         with st.expander(f"{grp['name']}  ·  {grp['direction']}"):
             col1, col2 = st.columns([5, 1])
@@ -697,13 +700,12 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
             # Add members
             outgoing = grp["direction"] == "expenses"
             all_txs = fetch_transactions(conn, outgoing_only=outgoing, incoming_only=(not outgoing))
-            existing_keys = {(m["reference"], m["description"]) for m in members}
             known_pairs = sorted(
                 {(t["reference"] or "", t["description"] or "") for t in all_txs},
                 key=lambda k: k[1].lower(),
             )
             available = [
-                (ref, desc) for ref, desc in known_pairs if (ref, desc) not in existing_keys
+                (ref, desc) for ref, desc in known_pairs if (ref, desc) not in all_assigned_keys
             ]
             if available:
                 labels = [desc if ref == desc else f"{ref} / {desc}" for ref, desc in available]

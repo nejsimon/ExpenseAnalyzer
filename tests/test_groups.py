@@ -7,6 +7,7 @@ import pytest
 from utgiftsanalys.db import (
     add_group_member,
     delete_group,
+    fetch_all_group_member_keys,
     fetch_group_members,
     fetch_groups,
     init_db,
@@ -228,3 +229,18 @@ def test_update_group_color_roundtrip():
 def test_update_group_color_missing_group_returns_false():
     conn = _make_conn()
     assert update_group_color(conn, "nonexistent", "#ff0000") is False
+
+
+def test_fetch_all_group_member_keys_returns_all_groups():
+    conn = _make_conn()
+    insert_group(conn, "G1", "expenses", "#ff0000")
+    insert_group(conn, "G2", "expenses", "#00ff00")
+    add_group_member(conn, "G1", "RefA", "DescA")
+    add_group_member(conn, "G2", "RefB", "DescB")
+    keys = fetch_all_group_member_keys(conn)
+    assert keys == {("RefA", "DescA"), ("RefB", "DescB")}
+
+
+def test_fetch_all_group_member_keys_empty():
+    conn = _make_conn()
+    assert fetch_all_group_member_keys(conn) == set()
