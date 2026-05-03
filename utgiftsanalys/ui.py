@@ -292,6 +292,14 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     col2.metric("Income", f"{inc_total:,.2f} SEK")
     col3.metric("Net", f"{inc_total - exp_total:,.2f} SEK")
 
+    if show_actuals:
+        exp_actual = sum(ln.actual_amount for ln in exp_lines if ln.actual_amount is not None)
+        inc_actual = sum(ln.actual_amount for ln in inc_lines if ln.actual_amount is not None)
+        acol1, acol2, acol3 = st.columns(3)
+        acol1.metric(f"{actual_label} expenses", f"{exp_actual:,.2f} SEK")
+        acol2.metric(f"{actual_label} income", f"{inc_actual:,.2f} SEK")
+        acol3.metric(f"{actual_label} net", f"{inc_actual - exp_actual:,.2f} SEK")
+
     st.subheader("Expense predictions")
     df = _prediction_df(exp_lines, show_actuals=show_actuals, actual_label=actual_label)
     if not df.empty:
