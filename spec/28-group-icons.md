@@ -1,6 +1,6 @@
 # Spec 28 — Group Icons
 
-**Status:** [ ] todo
+**Status:** [x] done
 
 ## Goal
 

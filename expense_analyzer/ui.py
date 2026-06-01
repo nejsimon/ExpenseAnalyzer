@@ -33,6 +33,7 @@ from expense_analyzer.db import (
     remove_group_member,
     set_group_exclude,
     update_group_color,
+    update_group_icon,
 )
 from expense_analyzer.importer import import_file
 from expense_analyzer.predictor import PredictionLine, enrich_with_actuals, predict_month
@@ -111,6 +112,78 @@ def _tab_import(conn: sqlite3.Connection) -> None:
         os.unlink(tmp_path)
 
 
+# ── Icon palette ─────────────────────────────────────────────────────────────
+
+_ICON_PALETTE: list[str] = [
+    # Home
+    "🏠",
+    "💡",
+    "🔥",
+    "🌊",
+    "🛠️",
+    "🔑",
+    # Transport
+    "🚗",
+    "🚌",
+    "🚲",
+    "✈️",
+    "🚂",
+    "⛽",
+    # Food
+    "🛒",
+    "🍽️",
+    "☕",
+    "🍕",
+    "🥤",
+    "🥦",
+    # Health
+    "💊",
+    "🏥",
+    "💪",
+    "🧘",
+    "🦷",
+    "👁️",
+    # Entertainment
+    "📺",
+    "🎮",
+    "🎵",
+    "🎬",
+    "📚",
+    "🎭",
+    # Tech / comms
+    "📱",
+    "💻",
+    "📶",
+    "🖥️",
+    # Finance
+    "💰",
+    "🏦",
+    "💳",
+    "📈",
+    "🏧",
+    # Personal care
+    "👕",
+    "💇",
+    "🐕",
+    "🐈",
+    "🧴",
+    # Education / work
+    "🎓",
+    "📐",
+    "💼",
+    "👔",
+    "📊",
+    # Misc
+    "🎁",
+    "🧾",
+    "🌍",
+]
+
+
+def _group_label(name: str, icon: str | None) -> str:
+    return f"{icon} {name}" if icon else name
+
+
 # ── Tab: Analyze ──────────────────────────────────────────────────────────────
 
 
@@ -133,7 +206,9 @@ def _style_by_color(df: pd.DataFrame, color_map: dict[str, str]) -> Styler:
     return df.style.apply(_row, axis=1)
 
 
-def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
+def _pattern_df(
+    patterns: list[RecurringPattern], icon_map: dict[str, str | None] | None = None
+) -> pd.DataFrame:
     rows = []
     for p in patterns:
         if p.amount_type == "fixed":
@@ -141,9 +216,10 @@ def _pattern_df(patterns: list[RecurringPattern]) -> pd.DataFrame:
         else:
             amount = f"{p.min_amount:.2f}–{p.max_amount:.2f} (var)"
         status = f"canceled (last: {p.end_date})" if p.status == "canceled" else "active"
+        icon = icon_map.get(p.description) if icon_map else None
         rows.append(
             {
-                "Merchant": p.description,
+                "Merchant": _group_label(p.description, icon),
                 "Cadence": p.cadence,
                 "Amount": amount,
                 "Start": str(p.start_date)[:7],
@@ -168,13 +244,19 @@ def _one_off_df(one_offs: list[OneOff]) -> pd.DataFrame:
 
 def _render_recurring_section(
     patterns: list[RecurringPattern],
+    icon_map: dict[str, str | None] | None = None,
 ) -> None:
     """Render all recurring patterns in a single table with group rows colored."""
-    df = _pattern_df(patterns)
+    df = _pattern_df(patterns, icon_map=icon_map)
     if df.empty:
         st.caption("(none)")
         return
-    color_map = {p.description: p.color for p in patterns if p.color is not None}
+    # color_map keys must match the (possibly icon-prefixed) Merchant column values
+    color_map = {
+        _group_label(p.description, icon_map.get(p.description) if icon_map else None): p.color
+        for p in patterns
+        if p.color is not None
+    }
     st.dataframe(_style_by_color(df, color_map), width="stretch", hide_index=True)
 
 
@@ -200,9 +282,13 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
     exp_one_offs = [o for o in exp_one_offs if str(o.booking_date)[:7] == month]
     inc_one_offs = [o for o in inc_one_offs if str(o.booking_date)[:7] == month]
 
+    icon_map: dict[str, str | None] = {
+        grp["name"]: grp["icon"] for grp in fetch_groups(conn) if grp["icon"]
+    }
+
     if not deposits_only:
         st.subheader("Expenses — recurring")
-        _render_recurring_section(exp_patterns)
+        _render_recurring_section(exp_patterns, icon_map=icon_map)
         st.subheader("Expenses — one-offs")
         df = _one_off_df(exp_one_offs)
         if not df.empty:
@@ -211,7 +297,7 @@ def _tab_analyze(conn: sqlite3.Connection, account: str | None) -> None:
             st.caption("(none)")
 
     st.subheader("Income — recurring")
-    _render_recurring_section(inc_patterns)
+    _render_recurring_section(inc_patterns, icon_map=icon_map)
     st.subheader("Income — one-offs")
     df = _one_off_df(inc_one_offs)
     if not df.empty:
@@ -232,12 +318,16 @@ def _actual_str(line: PredictionLine) -> str:
 
 
 def _prediction_df(
-    lines: list[PredictionLine], show_actuals: bool = False, actual_label: str = "Actual"
+    lines: list[PredictionLine],
+    show_actuals: bool = False,
+    actual_label: str = "Actual",
+    icon_map: dict[str, str | None] | None = None,
 ) -> pd.DataFrame:
     rows = []
     for line in lines:
+        icon = icon_map.get(line.description) if icon_map else None
         row: dict[str, str] = {
-            "Merchant": line.description,
+            "Merchant": _group_label(line.description, icon),
             "Cadence": line.cadence,
             "Predicted (SEK)": f"{line.predicted_amount:.2f}",
             "Range": line.range_str or "—",
@@ -279,6 +369,8 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
     exp_lines = predict_month(exp_patterns, month)
     inc_lines = predict_month(inc_patterns, month)
 
+    icon_map = {grp["name"]: grp["icon"] for grp in fetch_groups(conn) if grp["icon"]}
+
     show_actuals = month <= current_month
     actual_label = "Actual (so far)" if month == current_month else "Actual"
     if show_actuals:
@@ -302,17 +394,29 @@ def _tab_predict(conn: sqlite3.Connection, account: str | None) -> None:
         acol3.metric(f"{actual_label} net", f"{inc_actual - exp_actual:,.2f} SEK")
 
     st.subheader("Expense predictions")
-    df = _prediction_df(exp_lines, show_actuals=show_actuals, actual_label=actual_label)
+    df = _prediction_df(
+        exp_lines, show_actuals=show_actuals, actual_label=actual_label, icon_map=icon_map
+    )
     if not df.empty:
-        exp_colors = {ln.description: ln.color for ln in exp_lines if ln.color is not None}
+        exp_colors = {
+            _group_label(ln.description, icon_map.get(ln.description)): ln.color
+            for ln in exp_lines
+            if ln.color is not None
+        }
         st.dataframe(_style_by_color(df, exp_colors), width="stretch", hide_index=True)
     else:
         st.caption("(none)")
 
     st.subheader("Income predictions")
-    df = _prediction_df(inc_lines, show_actuals=show_actuals, actual_label=actual_label)
+    df = _prediction_df(
+        inc_lines, show_actuals=show_actuals, actual_label=actual_label, icon_map=icon_map
+    )
     if not df.empty:
-        inc_colors = {ln.description: ln.color for ln in inc_lines if ln.color is not None}
+        inc_colors = {
+            _group_label(ln.description, icon_map.get(ln.description)): ln.color
+            for ln in inc_lines
+            if ln.color is not None
+        }
         st.dataframe(_style_by_color(df, inc_colors), width="stretch", hide_index=True)
     else:
         st.caption("(none)")
@@ -433,12 +537,16 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     df_actuals = pd.DataFrame(actuals)
     df_pred = pd.DataFrame(pred_data)
 
+    # Build icon label map for chart legends: group name → "icon name" or just "name"
+    label_map = {grp["name"]: _group_label(grp["name"], grp["icon"]) for grp in fetch_groups(conn)}
+
     # Chart 1 — Monthly expenses (stacked by group)
     st.subheader("Monthly expenses")
     breakdown_exp = _cached_group_breakdown(db_path, "expenses", account)
     breakdown_exp = [r for r in breakdown_exp if month_from <= r["month"] <= month_to]
     if breakdown_exp:
         df_exp = pd.DataFrame(breakdown_exp)
+        df_exp["group"] = df_exp["group"].map(lambda g: label_map.get(g, g))
         groups_exp = df_exp[["group", "color"]].drop_duplicates().sort_values("group")
         domain_exp: list[str] = groups_exp["group"].tolist()
         range_exp: list[str] = groups_exp["color"].tolist()
@@ -475,6 +583,7 @@ def _tab_charts(conn: sqlite3.Connection, account: str | None) -> None:
     breakdown_inc = [r for r in breakdown_inc if month_from <= r["month"] <= month_to]
     if breakdown_inc:
         df_inc = pd.DataFrame(breakdown_inc)
+        df_inc["group"] = df_inc["group"].map(lambda g: label_map.get(g, g))
         groups_inc = df_inc[["group", "color"]].drop_duplicates().sort_values("group")
         domain_inc: list[str] = groups_inc["group"].tolist()
         range_inc: list[str] = groups_inc["color"].tolist()
@@ -655,7 +764,13 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
     all_assigned_keys = fetch_all_group_member_keys(conn)
 
     for grp in all_groups:
-        with st.expander(f"{grp['name']}  ·  {grp['direction']}"):
+        current_icon: str | None = grp["icon"]
+        expander_title = (
+            f"{current_icon} {grp['name']}  ·  {grp['direction']}"
+            if current_icon
+            else f"{grp['name']}  ·  {grp['direction']}"
+        )
+        with st.expander(expander_title):
             col1, col2 = st.columns([5, 1])
             col1.markdown(f"**{grp['name']}** — {grp['direction']}")
             if col2.button("Delete", key=f"del_grp_{grp['id']}", type="secondary"):
@@ -666,6 +781,23 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
             new_color = st.color_picker("Color", value=grp["color"], key=f"color_{grp['id']}")
             if new_color != grp["color"]:
                 update_group_color(conn, grp["name"], new_color)
+                st.cache_data.clear()
+                st.rerun()
+
+            # Icon picker — compact emoji grid
+            st.caption(f"Icon: {current_icon or '(none)'}")
+            icon_cols = st.columns(10)
+            for idx, emoji in enumerate(_ICON_PALETTE):
+                if icon_cols[idx % 10].button(
+                    emoji,
+                    key=f"icon_{grp['id']}_{idx}",
+                    type="primary" if emoji == current_icon else "secondary",
+                ):
+                    update_group_icon(conn, grp["name"], emoji)
+                    st.cache_data.clear()
+                    st.rerun()
+            if current_icon and st.button("✕ Clear icon", key=f"icon_clear_{grp['id']}"):
+                update_group_icon(conn, grp["name"], None)
                 st.cache_data.clear()
                 st.rerun()
 

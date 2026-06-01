@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS groups (
     name                    TEXT NOT NULL UNIQUE,
     direction               TEXT NOT NULL CHECK (direction IN ('expenses', 'income')),
     color                   TEXT NOT NULL DEFAULT '#888888',
-    exclude_from_prediction INTEGER NOT NULL DEFAULT 0
+    exclude_from_prediction INTEGER NOT NULL DEFAULT 0,
+    icon                    TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS group_members (
@@ -75,6 +76,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     for migration in [
         "ALTER TABLE groups ADD COLUMN exclude_from_prediction INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE group_members ADD COLUMN is_offset INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE groups ADD COLUMN icon TEXT DEFAULT NULL",
     ]:
         try:
             conn.execute(migration)
@@ -198,6 +200,13 @@ def set_group_exclude(conn: sqlite3.Connection, name: str, exclude: bool) -> boo
 def update_group_color(conn: sqlite3.Connection, name: str, color: str) -> bool:
     """Update the color of a group. Returns True if the group was found."""
     cursor = conn.execute("UPDATE groups SET color = ? WHERE name = ?", (color, name))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def update_group_icon(conn: sqlite3.Connection, name: str, icon: str | None) -> bool:
+    """Update the icon of a group. Pass None to clear it. Returns True if the group was found."""
+    cursor = conn.execute("UPDATE groups SET icon = ? WHERE name = ?", (icon, name))
     conn.commit()
     return cursor.rowcount > 0
 

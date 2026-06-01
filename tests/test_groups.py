@@ -15,6 +15,7 @@ from expense_analyzer.db import (
     remove_group_member,
     set_group_exclude,
     update_group_color,
+    update_group_icon,
 )
 from expense_analyzer.recurring import build_patterns
 
@@ -244,3 +245,25 @@ def test_fetch_all_group_member_keys_returns_all_groups():
 def test_fetch_all_group_member_keys_empty():
     conn = _make_conn()
     assert fetch_all_group_member_keys(conn) == set()
+
+
+def test_update_group_icon_roundtrip():
+    conn = _make_conn()
+    insert_group(conn, "transport", "expenses", "#ff0000")
+    assert update_group_icon(conn, "transport", "🚗") is True
+    grp = conn.execute("SELECT icon FROM groups WHERE name='transport'").fetchone()
+    assert grp["icon"] == "🚗"
+
+
+def test_update_group_icon_clear():
+    conn = _make_conn()
+    insert_group(conn, "transport", "expenses", "#ff0000")
+    update_group_icon(conn, "transport", "🚗")
+    update_group_icon(conn, "transport", None)
+    grp = conn.execute("SELECT icon FROM groups WHERE name='transport'").fetchone()
+    assert grp["icon"] is None
+
+
+def test_update_group_icon_missing_group_returns_false():
+    conn = _make_conn()
+    assert update_group_icon(conn, "nonexistent", "🚗") is False
