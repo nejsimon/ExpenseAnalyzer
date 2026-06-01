@@ -10,15 +10,20 @@ RUN uv sync --extra ui --no-dev --frozen --no-install-project
 
 # Stage 2 — runtime: copy venv + source only (no uv, no build tools)
 FROM python:3.13-slim
-WORKDIR /app
 
-COPY --from=builder /app/.venv /app/.venv
+RUN useradd --create-home app
+WORKDIR /home/app
+
+COPY --from=builder /app/.venv /home/app/.venv
 COPY expense_analyzer/ expense_analyzer/
 
-ENV PATH="/app/.venv/bin:$PATH"
+RUN mkdir /data && chown app:app /data
+
+USER app
+
+ENV PATH="/home/app/.venv/bin:$PATH"
 ENV EXPENSE_ANALYZER_DB=/data/expense-analyzer.db
 
-RUN mkdir /data
 VOLUME /data
 EXPOSE 8501
 
