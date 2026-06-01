@@ -26,7 +26,7 @@ uv run expense-analyzer predict --month 2026-06
 uv run expense-analyzer stats
 ```
 
-The database is stored at `data/utgiftsanalys.db` by default. Override with the `EXPENSE_ANALYZER_DB` environment variable or the `--db` flag.
+The database is stored at `data/expense-analyzer.db` by default. Override with the `EXPENSE_ANALYZER_DB` environment variable or the `--db` flag.
 
 ## Run tests
 

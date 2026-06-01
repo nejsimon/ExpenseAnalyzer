@@ -20,7 +20,7 @@ class TransactionDict(TypedDict):
     analysis_month: str
 
 
-DEFAULT_DB_PATH = str(Path(__file__).parent.parent / "data" / "utgiftsanalys.db")
+DEFAULT_DB_PATH = str(Path(__file__).parent.parent / "data" / "expense-analyzer.db")
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS transactions (
