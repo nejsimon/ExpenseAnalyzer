@@ -19,13 +19,18 @@ class YearStats:
     predicted_income_remaining: float | None  # None until spec 11
 
 
-def compute_stats(conn: sqlite3.Connection, account: str | None = None) -> list[YearStats]:
+def compute_stats(
+    conn: sqlite3.Connection,
+    account: str | None = None,
+    reference_date: date | None = None,
+) -> list[YearStats]:
     all_months_in_db = set(fetch_months(conn, account=account))
     if not all_months_in_db:
         return []
 
+    today = reference_date or date.today()
     all_txs = fetch_transactions(conn, outgoing_only=False, account=account)
-    current_year = date.today().year
+    current_year = today.year
 
     # Group transactions by year
     by_year: dict[int, list[sqlite3.Row]] = {}
@@ -34,8 +39,12 @@ def compute_stats(conn: sqlite3.Connection, account: str | None = None) -> list[
         by_year.setdefault(year, []).append(tx)
 
     # Build patterns once for each direction — used for current-year prediction
-    exp_patterns, _ = build_patterns(conn, account=account, direction="expenses")
-    inc_patterns, _ = build_patterns(conn, account=account, direction="income")
+    exp_patterns, _ = build_patterns(
+        conn, account=account, direction="expenses", reference_date=today
+    )
+    inc_patterns, _ = build_patterns(
+        conn, account=account, direction="income", reference_date=today
+    )
 
     result: list[YearStats] = []
     for year in sorted(by_year):

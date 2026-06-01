@@ -338,6 +338,56 @@ wheels = [
 ]
 
 [[package]]
+name = "expense-analyzer"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "chardet" },
+    { name = "click" },
+    { name = "holidays" },
+    { name = "tabulate" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-tabulate" },
+]
+ui = [
+    { name = "altair" },
+    { name = "streamlit" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "watchdog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "altair", marker = "extra == 'ui'", specifier = ">=5.0" },
+    { name = "chardet", specifier = ">=5.0" },
+    { name = "click", specifier = ">=8.1" },
+    { name = "holidays", specifier = ">=0.46" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+    { name = "streamlit", marker = "extra == 'ui'", specifier = ">=1.35" },
+    { name = "tabulate", specifier = ">=0.9" },
+    { name = "types-tabulate", marker = "extra == 'dev'" },
+]
+provides-extras = ["ui", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "watchdog", specifier = ">=6.0.0" }]
+
+[[package]]
 name = "filelock"
 version = "3.29.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1489,56 +1539,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
 ]
-
-[[package]]
-name = "utgiftsanalys"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "chardet" },
-    { name = "click" },
-    { name = "holidays" },
-    { name = "tabulate" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-tabulate" },
-]
-ui = [
-    { name = "altair" },
-    { name = "streamlit" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "watchdog" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "altair", marker = "extra == 'ui'", specifier = ">=5.0" },
-    { name = "chardet", specifier = ">=5.0" },
-    { name = "click", specifier = ">=8.1" },
-    { name = "holidays", specifier = ">=0.46" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "streamlit", marker = "extra == 'ui'", specifier = ">=1.35" },
-    { name = "tabulate", specifier = ">=0.9" },
-    { name = "types-tabulate", marker = "extra == 'dev'" },
-]
-provides-extras = ["ui", "dev"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "watchdog", specifier = ">=6.0.0" }]
 
 [[package]]
 name = "virtualenv"

@@ -1,6 +1,5 @@
 import sqlite3
 from datetime import date, timedelta
-from unittest.mock import patch
 
 import pytest
 
@@ -37,9 +36,7 @@ def test_single_past_year():
     conn = _make_conn()
     for m in range(1, 13):
         _add_tx(conn, -400.0, f"2024-{m:02d}")
-    with patch("utgiftsanalys.stats.date") as mock_date:
-        mock_date.today.return_value = date(2025, 6, 1)
-        stats = compute_stats(conn)
+    stats = compute_stats(conn, reference_date=date(2025, 6, 1))
 
     assert len(stats) == 1
     s = stats[0]
@@ -52,7 +49,7 @@ def test_single_past_year():
 
 def test_current_year_has_prediction():
     conn = _make_conn()
-    # 3 months of data for current year — need active recurring pattern for prediction
+    # 4 months of data — need active recurring pattern for prediction
     base = date(2026, 1, 15)
     for i in range(4):
         d = base + timedelta(days=30 * i)
@@ -68,9 +65,7 @@ def test_current_year_has_prediction():
             "analysis_month": m,
         })
 
-    with patch("utgiftsanalys.stats.date") as mock_date:
-        mock_date.today.return_value = date(2026, 5, 1)
-        stats = compute_stats(conn)
+    stats = compute_stats(conn, reference_date=date(2026, 5, 1))
 
     assert len(stats) == 1
     s = stats[0]
@@ -83,9 +78,7 @@ def test_income_tracked_separately():
     conn = _make_conn()
     _add_tx(conn, -300.0, "2025-01")
     _add_tx(conn, 25000.0, "2025-01")
-    with patch("utgiftsanalys.stats.date") as mock_date:
-        mock_date.today.return_value = date(2026, 1, 1)
-        stats = compute_stats(conn)
+    stats = compute_stats(conn, reference_date=date(2026, 1, 1))
 
     assert stats[0].actual_expense == pytest.approx(300.0)
     assert stats[0].actual_income == pytest.approx(25000.0)
@@ -95,9 +88,7 @@ def test_multiple_years():
     conn = _make_conn()
     _add_tx(conn, -500.0, "2024-06")
     _add_tx(conn, -600.0, "2025-06")
-    with patch("utgiftsanalys.stats.date") as mock_date:
-        mock_date.today.return_value = date(2026, 1, 1)
-        stats = compute_stats(conn)
+    stats = compute_stats(conn, reference_date=date(2026, 1, 1))
 
     years = [s.year for s in stats]
     assert 2024 in years and 2025 in years
@@ -107,9 +98,7 @@ def test_avg_expense_correct():
     conn = _make_conn()
     _add_tx(conn, -300.0, "2024-01")
     _add_tx(conn, -500.0, "2024-02")
-    with patch("utgiftsanalys.stats.date") as mock_date:
-        mock_date.today.return_value = date(2025, 1, 1)
-        stats = compute_stats(conn)
+    stats = compute_stats(conn, reference_date=date(2025, 1, 1))
 
     s = stats[0]
     assert s.actual_months == 2

@@ -41,7 +41,7 @@ class ContextObject(TypedDict):
 @click.option("--account", default=None, help="Filter by account number (Kontonummer).")
 @click.pass_context
 def main(ctx: click.Context, db: str, account: str | None) -> None:
-    """Utgiftsanalys — Swedish bank transaction analyser."""
+    """Expense Analyzer — bank transaction analyser."""
     ctx.ensure_object(dict)
     ctx.obj["db"] = db
     ctx.obj["account"] = account

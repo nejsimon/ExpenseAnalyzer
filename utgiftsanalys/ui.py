@@ -43,7 +43,7 @@ from utgiftsanalys.stats import YearStats, compute_stats
 
 
 def _db_path() -> str:
-    return os.environ.get("UTGIFTSANALYS_DB", DEFAULT_DB_PATH)
+    return os.environ.get("EXPENSE_ANALYZER_DB", DEFAULT_DB_PATH)
 
 
 @st.cache_resource
@@ -57,7 +57,7 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def _sidebar(conn: sqlite3.Connection) -> str | None:
-    st.sidebar.title("Utgiftsanalys")
+    st.sidebar.title("Expense Analyzer")
     st.sidebar.info(f"DB: {_db_path()}")
 
     accounts = fetch_accounts(conn)
@@ -755,7 +755,7 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Utgiftsanalys", page_icon="💰", layout="wide")
+    st.set_page_config(page_title="Expense Analyzer", page_icon="💰", layout="wide")
     conn = _get_conn()
     account = _sidebar(conn)
 

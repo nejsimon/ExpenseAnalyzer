@@ -1,6 +1,6 @@
-# utgiftsanalys
+# Expense Analyzer
 
-Swedish expense analysis CLI. Imports bank CSV transactions, detects recurring patterns, and predicts future expenses.
+Expense analysis CLI and UI. Imports bank CSV transactions, detects recurring patterns, and predicts future expenses.
 
 ## Project Layout
 
