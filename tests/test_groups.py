@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from utgiftsanalys.db import (
+from expense_analyzer.db import (
     add_group_member,
     delete_group,
     fetch_all_group_member_keys,
@@ -16,7 +16,7 @@ from utgiftsanalys.db import (
     set_group_exclude,
     update_group_color,
 )
-from utgiftsanalys.recurring import build_patterns
+from expense_analyzer.recurring import build_patterns
 
 
 def _make_conn() -> sqlite3.Connection:

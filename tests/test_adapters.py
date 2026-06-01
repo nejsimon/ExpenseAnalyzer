@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from utgiftsanalys.adapters import (
+from expense_analyzer.adapters import (
     ADAPTERS,
     AmbiguousAdapterError,
     CsvAdapter,
     SwedBankAdapter,
     detect_adapter,
 )
-from utgiftsanalys.importer import _parse_amount, import_file
-from utgiftsanalys.db import init_db, get_connection
+from expense_analyzer.importer import _parse_amount, import_file
+from expense_analyzer.db import init_db, get_connection
 
 
 # --- detect_adapter ---
@@ -168,8 +168,8 @@ def test_detect_adapter_ambiguous_path_raises_ambiguous_error_in_importer(monkey
                     SwedBankAdapter.column_map)
     a2 = CsvAdapter("bank2", ["Bokföringsdag", "Beskrivning", "Belopp", "Kontonummer"],
                     SwedBankAdapter.column_map)
-    import utgiftsanalys.importer as imp_mod
-    import utgiftsanalys.adapters as adp_mod
+    import expense_analyzer.importer as imp_mod
+    import expense_analyzer.adapters as adp_mod
     monkeypatch.setattr(adp_mod, "ADAPTERS", [a1, a2])
 
     content = _make_swedbank_csv([_default_row()])

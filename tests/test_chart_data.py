@@ -4,8 +4,8 @@ from datetime import date
 
 import pytest
 
-from utgiftsanalys.chart_data import monthly_actuals, monthly_group_breakdown
-from utgiftsanalys.db import add_group_member, init_db, insert_group
+from expense_analyzer.chart_data import monthly_actuals, monthly_group_breakdown
+from expense_analyzer.db import add_group_member, init_db, insert_group
 
 
 def _make_conn() -> sqlite3.Connection:
@@ -160,7 +160,7 @@ def test_income_group_with_offset_builds_correct_pattern():
         _add_tx(conn, "Transfer In", "XferIn", +5000.0, date(2025, 1 + month, 1))
         _add_tx(conn, "Transfer Back", "XferBack", -800.0, date(2025, 1 + month, 28))
 
-    from utgiftsanalys.recurring import build_patterns
+    from expense_analyzer.recurring import build_patterns
     patterns, _ = build_patterns(conn, reference_date=date(2025, 5, 1), direction="income")
     assert len(patterns) == 1
     p = patterns[0]
@@ -177,7 +177,7 @@ def test_offset_expense_excluded_from_expense_patterns():
     for month in range(4):
         _add_tx(conn, "Transfer Back", "XferBack", -800.0, date(2025, 1 + month, 28))
 
-    from utgiftsanalys.recurring import build_patterns
+    from expense_analyzer.recurring import build_patterns
     exp_patterns, _ = build_patterns(conn, reference_date=date(2025, 6, 1), direction="expenses")
     descs = {p.description for p in exp_patterns}
     assert "Transfer Back" not in descs

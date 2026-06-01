@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from utgiftsanalys.ui import _contrast_color
+from expense_analyzer.ui import _contrast_color
 
 
 def test_contrast_color_light_bg_gives_black():

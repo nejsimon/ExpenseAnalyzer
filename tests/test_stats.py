@@ -3,8 +3,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from utgiftsanalys.db import init_db, insert_transaction
-from utgiftsanalys.stats import compute_stats
+from expense_analyzer.db import init_db, insert_transaction
+from expense_analyzer.stats import compute_stats
 
 
 def _make_conn():

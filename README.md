@@ -11,7 +11,7 @@ uv sync --extra ui
 ## Run the UI
 
 ```bash
-streamlit run utgiftsanalys/ui.py
+streamlit run expense_analyzer/ui.py
 ```
 
 Opens at http://localhost:8501.

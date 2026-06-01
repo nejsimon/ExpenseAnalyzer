@@ -1,6 +1,6 @@
 from datetime import date
 
-from utgiftsanalys.calendar_utils import current_analysis_month, get_analysis_month, swedish_bank_days
+from expense_analyzer.calendar_utils import current_analysis_month, get_analysis_month, swedish_bank_days
 
 
 def test_bank_days_excludes_weekends():

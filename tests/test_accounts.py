@@ -2,9 +2,9 @@ import hashlib
 import sqlite3
 from datetime import date, timedelta
 
-from utgiftsanalys.db import fetch_accounts, fetch_transactions, init_db, insert_transaction
-from utgiftsanalys.recurring import build_patterns
-from utgiftsanalys.stats import compute_stats
+from expense_analyzer.db import fetch_accounts, fetch_transactions, init_db, insert_transaction
+from expense_analyzer.recurring import build_patterns
+from expense_analyzer.stats import compute_stats
 from unittest.mock import patch
 
 
@@ -119,7 +119,7 @@ def test_compute_stats_filters_by_account():
     _add_tx(conn, "M", "ACC1", -300.0, date(2024, 6, 15))
     _add_tx(conn, "M", "ACC2", -900.0, date(2024, 6, 15))
 
-    with patch("utgiftsanalys.stats.date") as mock_date:
+    with patch("expense_analyzer.stats.date") as mock_date:
         mock_date.today.return_value = date(2025, 1, 1)
         s1 = compute_stats(conn, account="ACC1")
         s2 = compute_stats(conn, account="ACC2")

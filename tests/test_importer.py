@@ -2,8 +2,8 @@ import sqlite3
 import tempfile
 import os
 
-from utgiftsanalys.db import init_db, fetch_transactions
-from utgiftsanalys.importer import import_file, detect_encoding, detect_holes, add_months
+from expense_analyzer.db import init_db, fetch_transactions
+from expense_analyzer.importer import import_file, detect_encoding, detect_holes, add_months
 
 
 CSV_CONTENT_UTF8 = (

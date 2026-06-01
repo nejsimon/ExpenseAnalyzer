@@ -7,9 +7,9 @@ import pandas as pd
 import streamlit as st
 from pandas.io.formats.style import Styler
 
-from utgiftsanalys.adapters import ADAPTERS, AmbiguousAdapterError
-from utgiftsanalys.calendar_utils import current_analysis_month
-from utgiftsanalys.chart_data import (
+from expense_analyzer.adapters import ADAPTERS, AmbiguousAdapterError
+from expense_analyzer.calendar_utils import current_analysis_month
+from expense_analyzer.chart_data import (
     GroupAmount,
     MonthActual,
     MonthPrediction,
@@ -17,7 +17,7 @@ from utgiftsanalys.chart_data import (
     monthly_group_breakdown,
     monthly_with_predictions,
 )
-from utgiftsanalys.db import (
+from expense_analyzer.db import (
     DEFAULT_DB_PATH,
     add_group_member,
     delete_group,
@@ -34,10 +34,10 @@ from utgiftsanalys.db import (
     set_group_exclude,
     update_group_color,
 )
-from utgiftsanalys.importer import import_file
-from utgiftsanalys.predictor import PredictionLine, enrich_with_actuals, predict_month
-from utgiftsanalys.recurring import OneOff, RecurringPattern, build_patterns
-from utgiftsanalys.stats import YearStats, compute_stats
+from expense_analyzer.importer import import_file
+from expense_analyzer.predictor import PredictionLine, enrich_with_actuals, predict_month
+from expense_analyzer.recurring import OneOff, RecurringPattern, build_patterns
+from expense_analyzer.stats import YearStats, compute_stats
 
 # ── DB connection ─────────────────────────────────────────────────────────────
 

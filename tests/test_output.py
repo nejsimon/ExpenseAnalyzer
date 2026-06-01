@@ -2,9 +2,9 @@ import csv
 import io
 from datetime import date
 
-from utgiftsanalys.output import render_import_result, render_prediction, render_recurring_summary
-from utgiftsanalys.predictor import PredictionLine
-from utgiftsanalys.recurring import OneOff, RecurringPattern
+from expense_analyzer.output import render_import_result, render_prediction, render_recurring_summary
+from expense_analyzer.predictor import PredictionLine
+from expense_analyzer.recurring import OneOff, RecurringPattern
 
 
 def _pattern(desc, cadence, amount_type, fixed=None, mn=None, mx=None, status="active"):

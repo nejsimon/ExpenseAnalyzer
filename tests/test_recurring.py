@@ -3,8 +3,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from utgiftsanalys.db import add_group_member, init_db, insert_group, insert_transaction
-from utgiftsanalys.recurring import build_patterns
+from expense_analyzer.db import add_group_member, init_db, insert_group, insert_transaction
+from expense_analyzer.recurring import build_patterns
 
 
 def _make_conn():

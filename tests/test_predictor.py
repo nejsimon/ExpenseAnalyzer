@@ -3,9 +3,9 @@ from datetime import date, timedelta
 
 import pytest
 
-from utgiftsanalys.db import add_group_member, init_db, insert_group, insert_transaction
-from utgiftsanalys.predictor import PredictionLine, _hits_month, _weighted_average, enrich_with_actuals, predict_month
-from utgiftsanalys.recurring import RecurringPattern, build_patterns
+from expense_analyzer.db import add_group_member, init_db, insert_group, insert_transaction
+from expense_analyzer.predictor import PredictionLine, _hits_month, _weighted_average, enrich_with_actuals, predict_month
+from expense_analyzer.recurring import RecurringPattern, build_patterns
 
 
 def _make_conn():

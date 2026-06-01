@@ -4,20 +4,20 @@ repos:
       - id: mypy
         name: mypy type check
         language: system
-        entry: uv run mypy utgiftsanalys/
+        entry: uv run mypy expense_analyzer/
         types: [python]
         pass_filenames: false
 
       - id: ruff-check
         name: ruff lint
         language: system
-        entry: uv run ruff check utgiftsanalys/
+        entry: uv run ruff check expense_analyzer/
         types: [python]
         pass_filenames: false
 
       - id: ruff-format
         name: ruff format check
         language: system
-        entry: uv run ruff format --check utgiftsanalys/
+        entry: uv run ruff format --check expense_analyzer/
         types: [python]
         pass_filenames: false
