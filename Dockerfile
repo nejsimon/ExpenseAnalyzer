@@ -22,6 +22,7 @@ RUN mkdir /data && chown app:app /data
 USER app
 
 ENV PATH="/home/app/.venv/bin:$PATH"
+ENV PYTHONPATH=/home/app
 ENV EXPENSE_ANALYZER_DB=/data/expense-analyzer.db
 
 VOLUME /data
