@@ -822,7 +822,7 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
                         else f"{m['reference']} / {m['description']}"
                     )
                     if m["is_offset"]:
-                        label = f"{label} (offset)"
+                        label = f"{label} (payment)"
                     mc1.text(label)
                     if mc2.button("Remove", key=f"rem_{grp['id']}_{m['id']}"):
                         remove_group_member(conn, grp["name"], m["reference"], m["description"])
@@ -858,9 +858,8 @@ def _tab_groups(conn: sqlite3.Connection) -> None:
                 labels = []
                 for ref, desc in available:
                     base = desc if ref == desc else f"{ref} / {desc}"
-                    if grp["direction"] == "income" and key_is_expense.get((ref, desc)):
-                        base = f"{base} (offset)"
-                    labels.append(base)
+                    direction = "payment" if key_is_expense.get((ref, desc)) else "deposit"
+                    labels.append(f"{base} ({direction})")
                 with st.form(key=f"add_members_form_{grp['id']}"):
                     selected = st.multiselect("Add members", labels)
                     if st.form_submit_button("Add selected"):
